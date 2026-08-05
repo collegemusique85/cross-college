@@ -84,7 +84,7 @@
   <div id="panel">
     <div class="row">
       <button class="big bad" id="miss">Passage raté</button>
-      <button id="skip">Passer la série</button>
+      <button class="big go" id="skip">Série suivante →</button>
     </div>
     <div class="row">
       <span>mise au point</span>
@@ -99,6 +99,7 @@
       <button id="cont">Mode : guidé</button>
       <button id="autofocus">Point auto</button>
       <button id="copy">Copier le tableau</button>
+      <button id="relaunch">Relancer la caméra</button>
       <button id="restartAll">Tout recommencer</button>
     </div>
     <div id="log"></div>
@@ -141,18 +142,27 @@
   "use strict";
 
   var PROTO=[
-    {t:'QR A5 — référence',
-     pose:"Tablette au bord du couloir, à hauteur de dossard, objectif DANS L'AXE de ton élan. Prends 15 m d'élan. Dossard 142 (QR 140 mm).",
-     level:0, zoom:1, focus:'auto', code:'142', n:6},
-    {t:'DataMatrix 120 mm',
-     pose:"Ne bouge rien. Change juste de feuille : prends le 242 (DataMatrix 120 mm, modules de 10 mm).",
-     level:0, zoom:1, focus:'auto', code:'242', n:6},
-    {t:'DataMatrix 80 mm',
-     pose:"Même position. Prends le 243 (DataMatrix 80 mm, modules de 6,7 mm).",
-     level:0, zoom:1, focus:'auto', code:'243', n:6},
-    {t:'DataMatrix 50 mm',
-     pose:"Même position. Prends le 244 (DataMatrix 50 mm, modules de 4,2 mm — soit l'équivalent du QR A5 sur un carré de 5 cm).",
-     level:0, zoom:1, focus:'auto', code:'244', n:6}
+    {t:'1 — QR A5 (référence)', sheet:'142', n:5,
+     pose:"Les 3 iPads CÔTE À CÔTE, même hauteur de dossard, tous pointés dans l'axe de ton élan. Prends 15 m d'élan. Feuille 142.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'2 — DataMatrix 120 mm', sheet:'242', n:5,
+     pose:"Ne bouge aucun iPad. Change seulement de feuille : prends le 242.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'3 — DataMatrix 80 mm', sheet:'243', n:5,
+     pose:"Toujours rien à bouger. Feuille 243.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'4 — DataMatrix 50 mm', sheet:'244', n:5,
+     pose:"Toujours rien à bouger. Feuille 244.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'5 — Redondance échelonnée', sheet:'242', n:10,
+     pose:"ÉCHELONNE les iPads le long du couloir : le 1er à 8 m à gauche, le 2e à 4 m à droite, le 3e à 1,5 m à gauche et plus haut. Feuille 242.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'6 — Dossard maltraité', sheet:'242', n:5,
+     pose:"IPads inchangés. Plie la feuille en deux, cache-en un coin avec ton bras, ou tiens-la de travers. Un passage abîmé différemment à chaque fois.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
+    {t:'7 — Point verrouillé (bonus)', sheet:'242', n:5,
+     pose:"iPads inchangés, feuille 242. La mise au point se verrouille automatiquement à mi-course de la plage.",
+     level:0, zoom:1, focus:0.5, dec:'zxing', cont:true}
   ];
   var FLUX=[{label:'1080p',w:1920,h:1080},{label:'720p',w:1280,h:720},{label:'4K',w:3840,h:2160}];
 
@@ -203,10 +213,10 @@
     if(!s){ $('bStep').textContent='PROTOCOLE TERMINÉ';
       $('bTitle').textContent='Copie le tableau'; $('bCode').textContent=''; return; }
     $('bStep').textContent='SÉRIE '+(si+1)+'/'+PROTO.length+
-      ' · PASSAGE '+Math.min(pi+1,s.n)+'/'+s.n+
-      ' · '+seriesOk+' ok / '+seriesMiss+' ratés';
+      ' · DÉTECTÉS '+seriesOk+' / '+s.n+' PASSAGES À FAIRE';
     $('bTitle').textContent=s.t;
-    $('bCode').textContent='Présente le dossard '+s.code;
+    $('bCode').textContent='Feuille '+s.sheet+
+      (seriesOk>=s.n?'  —  série complète, va appuyer sur « série suivante »':'');
   }
 
   // ---- mesures ------------------------------------------------------------
@@ -226,9 +236,9 @@
 
   // ---- journal ------------------------------------------------------------
   function record(codeLu,statut,frames,pmin,pmax,net,dist){
-    var s=PROTO[si]||{t:'',code:''}, st=settings();
+    var s=PROTO[si]||{t:'',sheet:''}, st=settings();
     var z=st.zoom!=null?+st.zoom:1;
-    rows.push([clock(), (si+1), s.t, s.code, codeLu, statut, frames,
+    rows.push([clock(), (si+1), s.t, s.sheet, codeLu, statut, frames,
       pmin===''?'':pmin.toFixed(1), pmax===''?'':pmax.toFixed(1),
       pmin===''?'':estDist(pmin,z), dist||'',
       net===''?'':net.toFixed(1), z.toFixed(1),
@@ -277,13 +287,13 @@
 
   function showCard(p){
     armed=false;
-    var s=PROTO[si]||{code:''};
+    var s=PROTO[si]||{sheet:''};
     var pmin=Math.min.apply(null,p.mods), pmax=Math.max.apply(null,p.mods);
     var net=med(p.sharps), z=settings().zoom||1;
     var d=$('card');
     d.dataset.code=p.code; d.dataset.frames=p.frames;
     d.dataset.pmin=pmin; d.dataset.pmax=pmax; d.dataset.net=net;
-    $('cTitle').textContent = (p.code===s.code) ? 'Passage détecté' : 'Code inattendu : '+p.code;
+    $('cTitle').textContent = (p.code===s.sheet) ? 'Passage détecté' : 'Code inattendu : '+p.code;
     if(p.snap) $('shot').src=p.snap; else $('shot').removeAttribute('src');
     $('cInfo').textContent = p.frames+' images · détecté vers '+estDist(pmin,z)+
       ' m, perdu vers '+estDist(pmax,z)+' m · '+pmin.toFixed(1)+'→'+pmax.toFixed(1)+
@@ -300,27 +310,36 @@
       say('— protocole terminé, copie le tableau —'); return; }
     $('sTitle').textContent='Série '+(si+1)+'/'+PROTO.length+' — '+s.t;
     $('sPose').textContent=s.pose;
-    $('sKeys').textContent=s.n+' passages en courant · dossard '+s.code+
-      ' · flux '+FLUX[s.level].label+' · zoom ×'+s.zoom+
-      ' · point '+(s.focus==='auto'?'automatique':'à verrouiller');
+    $('sKeys').textContent=s.n+' passages en courant · feuille '+s.sheet+
+      ' · '+FLUX[s.level].label+' · zoom ×'+s.zoom+' · zxing · mode continu'+
+      ' · point '+(s.focus==='auto'?'automatique':'verrouillé automatiquement');
     $('setup').classList.add('on');
     if(level!==s.level){ level=s.level; restart(true); }
     else applySeries();
   }
 
   function applySeries(){
-    var s=PROTO[si]; if(!s||!track)return;
+    var s=PROTO[si]; if(!s)return;
+    // decodeur et mode : independants de la camera
+    if(s.dec&&window.ZXingWASM){ DEC=s.dec; $('dec').textContent='Décodeur : '+DEC; }
+    CONT=!!s.cont; $('cont').textContent='Mode : '+(CONT?'continu':'guidé');
+    if(!track)return;
     var c=track.getCapabilities?track.getCapabilities():{};
     if(c.zoom){
       var z=Math.max(c.zoom.min,Math.min(c.zoom.max,s.zoom));
-      track.applyConstraints({advanced:[{zoom:z}]}).then(function(){
-        $('focusv').textContent=$('focusv').textContent;
-        say('— zoom réglé sur ×'+z.toFixed(1)+' —');
-      },function(){say('— zoom refusé —')});
+      track.applyConstraints({advanced:[{zoom:z}]})
+        .then(function(){say('— zoom ×'+z.toFixed(1)+' —')},
+              function(){say('— zoom refusé —')});
     }
     if(s.focus==='auto'){
       track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){});
       $('focusv').textContent='auto';
+    }else if(c.focusDistance){
+      var f=c.focusDistance.min+(c.focusDistance.max-c.focusDistance.min)*s.focus;
+      $('focus').value=Math.round(s.focus*100);
+      track.applyConstraints({advanced:[{focusDistance:f}]})
+        .then(function(){$('focusv').textContent=f.toFixed(2);say('— point verrouillé sur '+f.toFixed(2)+' —')},
+              function(){$('focusv').textContent='refusé'});
     }
   }
 
@@ -449,8 +468,7 @@
       running=true; layoutGate(); stat.fpsAt=performance.now(); epoch++; tick(epoch);
       var st=settings();
       say('— flux '+st.width+'×'+st.height+' à '+(st.frameRate||'?')+' img/s —');
-      bindControls(); applySeries();
-      if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){});
+      bindControls(); applySeries(); watchTrack(); reWake();
       if(!keepSetup) openSetup();
     }).catch(function(){
       $('boot').classList.add('on');
@@ -517,6 +535,7 @@
     track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){});
     $('focusv').textContent='auto';
   });
+  $('relaunch').addEventListener('click',function(){ restart(true); });
   $('restartAll').addEventListener('click',function(){
     si=0; pi=0; seriesOk=0; seriesMiss=0; rows=[]; lines=[]; $('log').textContent='';
     openSetup();
@@ -530,6 +549,31 @@
       .then(function(){say('— tableau copié ('+rows.length+' lignes) —')},
             function(){say('— copie refusée —')});
   });
+  // --- reprise apres mise en veille : iOS termine le flux sans prevenir -----
+  var wake=null;
+  function reWake(){
+    if(navigator.wakeLock) navigator.wakeLock.request('screen')
+      .then(function(s){wake=s},function(){});
+  }
+  function watchTrack(){
+    if(!track)return;
+    track.onended=function(){say('— flux perdu, relance —');restart(true)};
+    track.onmute =function(){setTimeout(function(){
+      if(track&&track.muted){say('— flux muet, relance —');restart(true)}},600)};
+  }
+  function healthCheck(){
+    if(!running)return;
+    if(!track||track.readyState==='ended'||!V.videoWidth){
+      say('— caméra inactive, relance —'); restart(true);
+    }else if(V.paused){ V.play().catch(function(){restart(true)}); }
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='visible'){ reWake(); setTimeout(healthCheck,500); }
+  });
+  addEventListener('pageshow',function(){setTimeout(healthCheck,500)});
+  addEventListener('focus',function(){setTimeout(healthCheck,500)});
+  setInterval(healthCheck,4000);
+
   addEventListener('resize',layoutGate);
   addEventListener('orientationchange',function(){setTimeout(layoutGate,300)});
 })();
