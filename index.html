@@ -92,6 +92,11 @@
       <span id="focusv">auto</span>
     </div>
     <div class="row">
+      <input type="text" id="devname" placeholder="nom de l'appareil"
+        style="width:130px;background:#171B1E;border:1px solid #2E3538;color:var(--paper);
+        padding:10px;font:inherit;font-size:13px">
+      <button id="dec">Décodeur : zxing</button>
+      <button id="cont">Mode : guidé</button>
       <button id="autofocus">Point auto</button>
       <button id="copy">Copier le tableau</button>
       <button id="restartAll">Tout recommencer</button>
@@ -130,29 +135,30 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
 <script>
 (function(){
   "use strict";
 
   var PROTO=[
-    {t:'Zoom ×1, point auto',
-     pose:"Pose la tablette au bord du couloir, à hauteur de dossard, l'objectif pointé DANS L'AXE de ton élan — tu dois courir droit vers elle. Prends 15 m d'élan.",
+    {t:'QR A5 — référence',
+     pose:"Tablette au bord du couloir, à hauteur de dossard, objectif DANS L'AXE de ton élan. Prends 15 m d'élan. Dossard 142 (QR 140 mm).",
      level:0, zoom:1, focus:'auto', code:'142', n:6},
-    {t:'Zoom ×3, point auto',
-     pose:"Ne bouge pas la tablette. Le zoom passe à ×3 automatiquement. Même élan, même trajectoire.",
-     level:0, zoom:3, focus:'auto', code:'142', n:6},
-    {t:'Zoom ×3, point verrouillé au loin',
-     pose:"Même position. Fais glisser le curseur de mise au point jusqu'à ce qu'un dossard tenu à 4 m soit le plus net possible, puis n'y touche plus.",
-     level:0, zoom:3, focus:'manuel', code:'142', n:6},
-    {t:'Zoom ×3, point verrouillé, dossard 100 mm',
-     pose:"Même position et même réglage de point. Change de dossard : prends le 143, dont le QR ne fait que 100 mm.",
-     level:0, zoom:3, focus:'manuel', code:'143', n:6}
+    {t:'DataMatrix 120 mm',
+     pose:"Ne bouge rien. Change juste de feuille : prends le 242 (DataMatrix 120 mm, modules de 10 mm).",
+     level:0, zoom:1, focus:'auto', code:'242', n:6},
+    {t:'DataMatrix 80 mm',
+     pose:"Même position. Prends le 243 (DataMatrix 80 mm, modules de 6,7 mm).",
+     level:0, zoom:1, focus:'auto', code:'243', n:6},
+    {t:'DataMatrix 50 mm',
+     pose:"Même position. Prends le 244 (DataMatrix 50 mm, modules de 4,2 mm — soit l'équivalent du QR A5 sur un carré de 5 cm).",
+     level:0, zoom:1, focus:'auto', code:'244', n:6}
   ];
   var FLUX=[{label:'1080p',w:1920,h:1080},{label:'720p',w:1280,h:720},{label:'4K',w:3840,h:2160}];
 
   var V=document.getElementById('v'), FLOOD=document.getElementById('flood');
   var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
-  var track=null, roiW=0.70, roiH=0.34, audio=null, running=false, epoch=0, level=0;
+  var track=null, roiW=0.55, roiH=0.28, audio=null, running=false, epoch=0, level=0;
   var si=0, pi=0, armed=false, attempts=[];
   var stat={frames:0,fpsAt:0,fpsN:0,decodeMs:0};
   var pass={code:null,frames:0,mods:[],sharps:[],t0:0,shot:null,snap:null};
@@ -228,7 +234,8 @@
       net===''?'':net.toFixed(1), z.toFixed(1),
       st.focusDistance!=null?(+st.focusDistance).toFixed(2):'auto',
       (V.videoWidth||'')+'x'+(V.videoHeight||''), $('fps').textContent,
-      $('roires').textContent, stat.decodeMs.toFixed(1)]);
+      $('roires').textContent, stat.decodeMs.toFixed(1), DEC,
+      $('devname').value||'?']);
     say(clock()+'  S'+(si+1)+'  '+statut+'  '+codeLu+'  '+frames+' img  '+
         (pmin===''?'—':'détecté vers '+estDist(pmin,z)+' m'));
   }
@@ -241,10 +248,15 @@
   }
 
   // ---- passages -----------------------------------------------------------
+  var CONT=false;
   function closePass(){
     if(!pass.code)return;
     var p=pass; pass={code:null,frames:0,mods:[],sharps:[],t0:0,shot:null,snap:null};
-    showCard(p);
+    if(CONT){
+      var pmin=Math.min.apply(null,p.mods), pmax=Math.max.apply(null,p.mods);
+      record(p.code,'ok',p.frames,pmin,pmax,med(p.sharps),'');
+      seriesOk++; brief();
+    }else showCard(p);
   }
 
   function onHit(code,modulePx,net){
@@ -312,39 +324,85 @@
     }
   }
 
+  // ---- decodeurs ----------------------------------------------------------
+  var DEC='zxing', busy=false;
+  try{ if(window.ZXingWASM&&ZXingWASM.prepareZXingModule)
+        ZXingWASM.prepareZXingModule({fireImmediately:true}); }catch(e){ DEC='jsqr'; }
+  if(!window.ZXingWASM) DEC='jsqr';
+
+  // QR version 1 : 21 modules de large. DataMatrix 10x10 : 10.
+  function sideModules(fmt){
+    return (fmt&&String(fmt).toLowerCase().indexOf('datamatrix')>=0)?10:21;
+  }
+  function corners(r){
+    var p=r.position||r.Position||null;
+    if(!p)return 0;
+    var a=p.topLeft||p.topLeftCorner, b=p.topRight||p.topRightCorner;
+    if(!a||!b||a.x==null||b.x==null)return 0;
+    return Math.hypot(b.x-a.x,b.y-a.y)/sideModules(r.format);
+  }
+
+  // cb(list) ou cb(null). list = [{text, mod}]
+  function decode(img,cb){
+    var t0=performance.now();
+    if(DEC==='jsqr'){
+      var r=jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+      stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
+      cb(r&&r.data?[{text:r.data,mod:moduleSize(r.location)}]:null);
+      return;
+    }
+    busy=true;
+    ZXingWASM.readBarcodes(img,{formats:['QRCode','DataMatrix'],tryHarder:false,tryRotate:true,
+      maxNumberOfSymbols:4}).then(function(res){
+      busy=false;
+      stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
+      if(!res||!res.length){cb(null);return;}
+      cb(res.map(function(r){
+        return {text:(r.text!=null?r.text:(r.rawValue||'')), mod:corners(r)};
+      }).filter(function(o){return o.text}));
+    },function(err){
+      busy=false; DEC='jsqr'; $('dec').textContent='Décodeur : jsqr';
+      say('— zxing indisponible, retour à jsqr —'); cb(null);
+    });
+  }
+
   // ---- boucle -------------------------------------------------------------
   function tick(my){
     if(!running || my!==epoch) return;
+    var nx=function(){tick(my)};
+    if(busy){ requestAnimationFrame(nx); return; }
     var vw=V.videoWidth, vh=V.videoHeight;
     if(vw&&vh){
       var sw=Math.round(vw*roiW), sh=Math.round(vh*roiH);
       var sx=Math.round((vw-sw)/2), sy=Math.round((vh-sh)/2);
-      var k=Math.min(1,Math.sqrt(320000/(sw*sh)));
+      var budget=(DEC==='zxing')?700000:320000;
+      var k=Math.min(1,Math.sqrt(budget/(sw*sh)));
       var dw=Math.max(80,Math.round(sw*k)), dh=Math.max(60,Math.round(sh*k));
       if(cv.width!==dw||cv.height!==dh){
         cv.width=dw; cv.height=dh;
         $('res').textContent=vw+'×'+vh;
-        $('roires').textContent=dw+'×'+dh;
+        $('roires').textContent=dw+'×'+dh+(k<0.99?'r':'');
       }
       cx.drawImage(V,sx,sy,sw,sh,0,0,dw,dh);
       var img=cx.getImageData(0,0,dw,dh);
-      var t0=performance.now();
-      var r=jsQR(img.data,dw,dh,{inversionAttempts:'dontInvert'});
-      stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
-      var net=sharpness(img.data,dw,dh);
-      if(r&&r.data) onHit(r.data,moduleSize(r.location)/k,net);
-      else if(pass.code&&performance.now()-pass.t0>1200) closePass();
 
       stat.frames++;
       var now=performance.now();
       if(now-stat.fpsAt>500){
         $('fps').textContent=Math.round((stat.frames-stat.fpsN)*1000/(now-stat.fpsAt));
         $('dms').textContent=stat.decodeMs.toFixed(1);
-        $('sharp').textContent=net.toFixed(1);
+        $('sharp').textContent=sharpness(img.data,dw,dh).toFixed(1);
         stat.fpsAt=now; stat.fpsN=stat.frames;
       }
+      var netNow=+$('sharp').textContent||0;
+
+      decode(img,function(list){
+        if(list&&list.length){
+          for(var i=0;i<list.length;i++)
+            if(list[i].mod) onHit(list[i].text,list[i].mod/k,netNow);
+        }else if(pass.code&&performance.now()-pass.t0>1200) closePass();
+      });
     }
-    var nx=function(){tick(my)};
     if(V.requestVideoFrameCallback) V.requestVideoFrameCallback(nx);
     else requestAnimationFrame(nx);
   }
@@ -441,6 +499,18 @@
     track.applyConstraints({advanced:[{focusDistance:v}]}).then(function(){
       $('focusv').textContent=v.toFixed(2);
     },function(){$('focusv').textContent='refusé'});
+  });
+  $('cont').addEventListener('click',function(){
+    CONT=!CONT; armed=true;
+    this.textContent='Mode : '+(CONT?'continu':'guidé');
+    say('— mode '+(CONT?'continu, plus de fiche de validation':'guidé')+' —');
+  });
+  $('dec').addEventListener('click',function(){
+    if(!window.ZXingWASM){say('— zxing non chargé —');return;}
+    DEC=(DEC==='zxing')?'jsqr':'zxing';
+    this.textContent='Décodeur : '+DEC;
+    stat.decodeMs=0;
+    say('— décodeur : '+DEC+' —');
   });
   $('autofocus').addEventListener('click',function(){
     if(!track)return;
