@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Test de scan — comptage de tours</title>
+<style>
+  :root{
+    --ink:#0E1113;
+    --paper:#F5F3EE;
+    --signal:#12D67A;
+    --measure:#F2A93B;
+    --dim:#7C8388;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--ink);color:var(--paper);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    overscroll-behavior:none}
+  #stage{position:fixed;inset:0;overflow:hidden;background:#000}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+  /* Porte de comptage : deux equerres, pas un cadre */
+  #gate{position:absolute;left:0;right:0;pointer-events:none}
+  #gate i{position:absolute;width:34px;height:34px;border:3px solid var(--measure);opacity:.9}
+  #gate i:nth-child(1){top:0;left:14px;border-right:0;border-bottom:0}
+  #gate i:nth-child(2){top:0;right:14px;border-left:0;border-bottom:0}
+  #gate i:nth-child(3){bottom:0;left:14px;border-right:0;border-top:0}
+  #gate i:nth-child(4){bottom:0;right:14px;border-left:0;border-top:0}
+
+  #flood{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:var(--signal);flex-direction:column}
+  #flood.on{display:flex}
+  #flood b{font-size:26vw;font-weight:800;letter-spacing:-.04em;color:#04240F;line-height:.9}
+  #flood span{font-family:var(--mono);font-size:14px;color:#04240F;opacity:.65;margin-top:10px}
+
+  #hud{position:absolute;top:0;left:0;right:0;padding:10px 14px;
+    padding-top:calc(10px + env(safe-area-inset-top));
+    display:flex;gap:16px;font-family:var(--mono);font-size:12px;
+    background:linear-gradient(#0E1113CC,#0E111300)}
+  #hud b{color:var(--measure);font-weight:400}
+
+  #panel{position:absolute;left:0;right:0;bottom:0;
+    padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+    background:#0E1113F2;border-top:1px solid #23292C}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .cell{background:#171B1E;border:1px solid #23292C;padding:8px 9px}
+  .cell u{display:block;font-size:10px;text-decoration:none;color:var(--dim);
+    letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+  .cell v{display:block;font-family:var(--mono);font-size:19px;color:var(--paper)}
+  .cell v.hi{color:var(--measure)}
+  .row{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--dim)}
+  .row input[type=range]{flex:1;accent-color:var(--measure)}
+  button{font:inherit;font-size:13px;padding:9px 14px;border:1px solid #2E3538;
+    background:#171B1E;color:var(--paper);cursor:pointer}
+  button.go{background:var(--measure);color:#241703;border-color:var(--measure);font-weight:600}
+  #log{font-family:var(--mono);font-size:11px;color:var(--dim);max-height:88px;
+    overflow-y:auto;margin-top:10px;line-height:1.55;white-space:pre-wrap}
+  #boot{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:18px;text-align:center;padding:24px;background:var(--ink)}
+  #boot h1{font-size:19px;font-weight:600;letter-spacing:-.01em}
+  #boot p{font-size:13px;color:var(--dim);max-width:32ch;line-height:1.6}
+  #boot.hide{display:none}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="v" playsinline muted autoplay></video>
+  <div id="gate"><i></i><i></i><i></i><i></i></div>
+  <div id="flood"><b id="floodNum">—</b><span id="floodMeta"></span></div>
+
+  <div id="hud">
+    <span>img/s <b id="fps">—</b></span>
+    <span>flux <b id="res">—</b></span>
+    <span>zone <b id="roires">—</b></span>
+    <span>décod. <b id="dms">—</b> ms</span>
+  </div>
+
+  <div id="panel">
+    <div class="grid">
+      <div class="cell"><u>passages</u><v id="mPass">0</v></div>
+      <div class="cell"><u>img/passage</u><v id="mFrames" class="hi">—</v></div>
+      <div class="cell"><u>px/module</u><v id="mMod" class="hi">—</v></div>
+      <div class="cell"><u>dernier</u><v id="mLast">—</v></div>
+    </div>
+    <div class="row">
+      <span>hauteur de zone</span>
+      <input type="range" id="roiH" min="15" max="100" value="45">
+      <span id="roiHv">45 %</span>
+    </div>
+    <div class="row">
+      <button id="torch">Tester la lampe</button>
+      <button id="reset">Remettre à zéro</button>
+      <button id="copy">Copier le relevé</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <div id="boot">
+    <h1>Test de scan — comptage de tours</h1>
+    <p>Pose la tablette sur un pied, à hauteur de dossard, face aux coureurs qui arrivent. Fais passer le même dossard dix fois par configuration.</p>
+    <button class="go" id="start">Activer la caméra</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+(function(){
+  "use strict";
+  var V=document.getElementById('v'), FLOOD=document.getElementById('flood');
+  var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+  var track=null, roiRatio=0.45, audio=null, running=false;
+
+  var stat={frames:0,fpsAt:0,fpsN:0,decodeMs:0};
+  var pass={code:null,frames:0,mods:[],t0:0};
+  var totals={passages:0,frames:[],mods:[]};
+  var lines=[];
+
+  function $(id){return document.getElementById(id)}
+  function say(s){lines.unshift(s); if(lines.length>60)lines.pop(); $('log').textContent=lines.join('\n');}
+  function med(a){if(!a.length)return 0;var b=a.slice().sort(function(x,y){return x-y});
+    return b[Math.floor(b.length/2)];}
+  function clock(){var d=new Date();return d.toTimeString().slice(0,8);}
+
+  function beep(){
+    if(!audio)return;
+    var o=audio.createOscillator(), g=audio.createGain();
+    o.connect(g); g.connect(audio.destination);
+    o.frequency.value=1180; o.type='sine';
+    g.gain.setValueAtTime(0.0001,audio.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.32,audio.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+0.12);
+    o.start(); o.stop(audio.currentTime+0.13);
+  }
+
+  function layoutGate(){
+    var h=Math.round(window.innerHeight*roiRatio);
+    var g=$('gate');
+    g.style.height=h+'px';
+    g.style.top=Math.round((window.innerHeight-h)/2)+'px';
+  }
+
+  function closePass(){
+    if(!pass.code)return;
+    totals.passages++;
+    totals.frames.push(pass.frames);
+    var m=med(pass.mods);
+    totals.mods.push(m);
+    say(clock()+'  '+pass.code+'   '+pass.frames+' img   '+m.toFixed(1)+' px/module');
+    $('mPass').textContent=totals.passages;
+    $('mFrames').textContent=med(totals.frames).toFixed(0);
+    $('mMod').textContent=med(totals.mods).toFixed(1);
+    pass={code:null,frames:0,mods:[],t0:0};
+  }
+
+  function onHit(code, modulePx){
+    var now=performance.now();
+    if(pass.code===code && now-pass.t0<1500){
+      pass.frames++; pass.mods.push(modulePx); pass.t0=now;
+    }else{
+      closePass();
+      pass={code:code,frames:1,mods:[modulePx],t0:now};
+      $('mLast').textContent=code;
+      $('floodNum').textContent=code;
+      $('floodMeta').textContent=modulePx.toFixed(1)+' px/module';
+      FLOOD.classList.add('on');
+      beep();
+      setTimeout(function(){FLOOD.classList.remove('on')},600);
+    }
+  }
+
+  function moduleSize(loc){
+    var a=loc.topLeftCorner, b=loc.topRightCorner;
+    var side=Math.hypot(b.x-a.x,b.y-a.y);
+    return side/21;               // QR version 1 : 21 modules de large
+  }
+
+  function tick(){
+    if(!running)return;
+    var vw=V.videoWidth, vh=V.videoHeight;
+    if(vw&&vh){
+      var rh=Math.round(vh*roiRatio);
+      var ry=Math.round((vh-rh)/2);
+      if(cv.width!==vw||cv.height!==rh){cv.width=vw;cv.height=rh;
+        $('res').textContent=vw+'×'+vh; $('roires').textContent=vw+'×'+rh;}
+      cx.drawImage(V,0,ry,vw,rh,0,0,vw,rh);
+      var img=cx.getImageData(0,0,vw,rh);
+      var t0=performance.now();
+      var r=jsQR(img.data,vw,rh,{inversionAttempts:'dontInvert'});
+      stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
+      if(r&&r.data) onHit(r.data, moduleSize(r.location));
+      else if(pass.code&&performance.now()-pass.t0>1500) closePass();
+
+      stat.frames++;
+      var now=performance.now();
+      if(now-stat.fpsAt>500){
+        $('fps').textContent=Math.round((stat.frames-stat.fpsN)*1000/(now-stat.fpsAt));
+        $('dms').textContent=stat.decodeMs.toFixed(1);
+        stat.fpsAt=now; stat.fpsN=stat.frames;
+      }
+    }
+    if(V.requestVideoFrameCallback) V.requestVideoFrameCallback(tick);
+    else requestAnimationFrame(tick);
+  }
+
+  $('roiH').addEventListener('input',function(){
+    roiRatio=this.value/100; $('roiHv').textContent=this.value+' %'; layoutGate();
+  });
+  $('reset').addEventListener('click',function(){
+    totals={passages:0,frames:[],mods:[]}; lines=[]; $('log').textContent='';
+    $('mPass').textContent='0'; $('mFrames').textContent='—'; $('mMod').textContent='—';
+  });
+  $('copy').addEventListener('click',function(){
+    var head='passages='+totals.passages+
+      '  img/passage(med)='+med(totals.frames).toFixed(0)+
+      '  px/module(med)='+med(totals.mods).toFixed(1)+
+      '  flux='+$('res').textContent+'  img/s='+$('fps').textContent+'\n';
+    navigator.clipboard.writeText(head+lines.slice().reverse().join('\n'))
+      .then(function(){say('— relevé copié —')},function(){say('— copie refusée —')});
+  });
+  $('torch').addEventListener('click',function(){
+    if(!track){say('— pas de flux vidéo —');return;}
+    var caps=track.getCapabilities?track.getCapabilities():{};
+    if(!('torch' in caps)){say('— lampe non pilotable sur cet appareil —');return;}
+    var on=!(track.getSettings().torch);
+    track.applyConstraints({advanced:[{torch:on}]})
+      .then(function(){say('— lampe '+(on?'allumée':'éteinte')+' —')})
+      .catch(function(){say('— lampe refusée —')});
+  });
+
+  $('start').addEventListener('click',function(){
+    try{audio=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}catch(e){}
+    navigator.mediaDevices.getUserMedia({audio:false,video:{
+      facingMode:{ideal:'environment'},
+      width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}
+    }}).then(function(s){
+      V.srcObject=s; track=s.getVideoTracks()[0];
+      return V.play();
+    }).then(function(){
+      $('boot').classList.add('hide');
+      running=true; layoutGate(); stat.fpsAt=performance.now(); tick();
+      var st=track.getSettings();
+      say('— flux '+st.width+'×'+st.height+' à '+(st.frameRate||'?')+' img/s —');
+      if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){});
+    }).catch(function(e){
+      alert('Caméra indisponible : '+e.name+'\nLa page doit être servie en HTTPS.');
+    });
+  });
+
+  window.addEventListener('resize',layoutGate);
+  window.addEventListener('orientationchange',function(){setTimeout(layoutGate,300)});
+})();
+</script>
+</body>
+</html>
