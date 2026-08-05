@@ -88,13 +88,28 @@
       <div class="cell"><u>dernier</u><v id="mLast">—</v></div>
     </div>
     <div class="row">
-      <span>hauteur de zone</span>
+      <span>largeur</span>
+      <input type="range" id="roiW" min="20" max="100" value="70">
+      <span id="roiWv">70 %</span>
+    </div>
+    <div class="row">
+      <span>hauteur</span>
       <input type="range" id="roiH" min="10" max="100" value="30">
       <span id="roiHv">30 %</span>
     </div>
     <div class="row">
-      <button id="flux">Basculer en 720p</button>
-      <button id="torch">Tester la lampe</button>
+      <span>mise au point</span>
+      <input type="range" id="focus" min="0" max="100" value="50" disabled>
+      <span id="focusv">auto</span>
+    </div>
+    <div class="row">
+      <span>zoom</span>
+      <input type="range" id="zoomr" min="0" max="100" value="0" disabled>
+      <span id="zoomv">×1</span>
+    </div>
+    <div class="row">
+      <button id="flux">Flux : 1080p</button>
+      <button id="autofocus">Revenir à l'auto</button>
       <button id="reset">Remettre à zéro</button>
       <button id="copy">Copier</button>
     </div>
@@ -115,7 +130,7 @@
   "use strict";
   var V=document.getElementById('v'), FLOOD=document.getElementById('flood');
   var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
-  var track=null, roiRatio=0.45, audio=null, running=false;
+  var track=null, roiW=0.70, roiH=0.30, audio=null, running=false;
 
   var stat={frames:0,fpsAt:0,fpsN:0,decodeMs:0};
   var pass={code:null,frames:0,mods:[],t0:0};
@@ -140,10 +155,14 @@
   }
 
   function layoutGate(){
-    var h=Math.round(window.innerHeight*roiRatio);
     var g=$('gate');
+    var h=Math.round(window.innerHeight*roiH);
+    var w=Math.round(window.innerWidth*roiW);
     g.style.height=h+'px';
     g.style.top=Math.round((window.innerHeight-h)/2)+'px';
+    g.style.width=w+'px';
+    g.style.left=Math.round((window.innerWidth-w)/2)+'px';
+    g.style.right='auto';
   }
 
   function closePass(){
@@ -181,9 +200,10 @@
     return side/21;               // QR version 1 : 21 modules de large
   }
 
-  // Largeur cible envoyee au decodeur. Inutile de lui donner 1080 px de large :
-  // 3 a 4 px par module suffisent, et le cout du decodage suit la surface.
-  var TARGET_W=640;
+  // On DECOUPE une fenetre a resolution native plutot que de reduire l'image :
+  // reduire ferait chuter les px/module, qui sont la ressource critique.
+  // On ne reduit qu'en dernier recours, si la fenetre depasse le budget.
+  var BUDGET=320000;
 
   function sharpness(d,w,h){
     var s=0,n=0,st=2;
@@ -203,22 +223,21 @@
     if(!running)return;
     var vw=V.videoWidth, vh=V.videoHeight;
     if(vw&&vh){
-      var rh=Math.round(vh*roiRatio);
-      var ry=Math.round((vh-rh)/2);
-      var k=Math.min(1, TARGET_W/vw);
-      var dw=Math.max(80,Math.round(vw*k));
-      var dh=Math.max(60,Math.round(rh*k));
+      var sw=Math.round(vw*roiW), sh=Math.round(vh*roiH);
+      var sx=Math.round((vw-sw)/2), sy=Math.round((vh-sh)/2);
+      var k=Math.min(1, Math.sqrt(BUDGET/(sw*sh)));
+      var dw=Math.max(80,Math.round(sw*k)), dh=Math.max(60,Math.round(sh*k));
       if(cv.width!==dw||cv.height!==dh){
         cv.width=dw; cv.height=dh;
         $('res').textContent=vw+'×'+vh;
-        $('roires').textContent=dw+'×'+dh;
+        $('roires').textContent=dw+'×'+dh+(k<0.99?' ('+Math.round(k*100)+'%)':' natif');
       }
-      cx.drawImage(V,0,ry,vw,rh,0,0,dw,dh);
+      cx.drawImage(V,sx,sy,sw,sh,0,0,dw,dh);
       var img=cx.getImageData(0,0,dw,dh);
       var t0=performance.now();
       var r=jsQR(img.data,dw,dh,{inversionAttempts:'dontInvert'});
       stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
-      if(r&&r.data) onHit(r.data, moduleSize(r.location));
+      if(r&&r.data) onHit(r.data, moduleSize(r.location)/k);
       else if(pass.code&&performance.now()-pass.t0>1500) closePass();
 
       stat.frames++;
@@ -235,13 +254,54 @@
   }
 
   $('roiH').addEventListener('input',function(){
-    roiRatio=this.value/100; $('roiHv').textContent=this.value+' %'; layoutGate();
+    roiH=this.value/100; $('roiHv').textContent=this.value+' %'; layoutGate();
+  });
+  $('roiW').addEventListener('input',function(){
+    roiW=this.value/100; $('roiWv').textContent=this.value+' %'; layoutGate();
   });
   $('flux').addEventListener('click',function(){
-    hires=!hires;
-    this.textContent = hires ? 'Basculer en 720p' : 'Basculer en 1080p';
+    level=(level+1)%FLUX.length;
+    this.textContent='Flux : '+FLUX[level].label;
     restart();
   });
+
+  function range(name){
+    if(!track||!track.getCapabilities)return null;
+    var c=track.getCapabilities()[name];
+    return (c&&typeof c.min==='number'&&typeof c.max==='number'&&c.max>c.min)?c:null;
+  }
+  function apply(name,value,label,el){
+    var o={}; o[name]=value;
+    track.applyConstraints({advanced:[o]}).then(function(){
+      $(el).textContent=label;
+    },function(){ $(el).textContent='refusé'; });
+  }
+
+  $('focus').addEventListener('input',function(){
+    var c=range('focusDistance'); if(!c)return;
+    var v=c.min+(c.max-c.min)*this.value/100;
+    apply('focusDistance',v,v.toFixed(2)+' m','focusv');
+  });
+  $('zoomr').addEventListener('input',function(){
+    var c=range('zoom'); if(!c)return;
+    var v=c.min+(c.max-c.min)*this.value/100;
+    apply('zoom',v,'×'+v.toFixed(1),'zoomv');
+  });
+  $('autofocus').addEventListener('click',function(){
+    if(!track)return;
+    track.applyConstraints({advanced:[{focusMode:'continuous'}]})
+      .then(function(){say('— mise au point rendue à l\'automatique —')},
+            function(){say('— retour auto refusé, relance le flux —')});
+    $('focusv').textContent='auto';
+  });
+
+  function bindControls(){
+    var f=range('focusDistance'), z=range('zoom');
+    if(f){ $('focus').disabled=false;
+      say('— mise au point réglable de '+f.min+' à '+f.max+' —'); }
+    if(z){ $('zoomr').disabled=false;
+      say('— zoom réglable de '+z.min+' à '+z.max+' —'); }
+  }
   $('reset').addEventListener('click',function(){
     totals={passages:0,frames:[],mods:[]}; lines=[]; $('log').textContent='';
     $('mPass').textContent='0'; $('mFrames').textContent='—'; $('mMod').textContent='—';
@@ -254,31 +314,27 @@
     navigator.clipboard.writeText(head+lines.slice().reverse().join('\n'))
       .then(function(){say('— relevé copié —')},function(){say('— copie refusée —')});
   });
-  $('torch').addEventListener('click',function(){
-    if(!track){say('— pas de flux vidéo —');return;}
-    var caps=track.getCapabilities?track.getCapabilities():{};
-    if(!('torch' in caps)){say('— lampe non pilotable sur cet appareil —');return;}
-    var on=!(track.getSettings().torch);
-    track.applyConstraints({advanced:[{torch:on}]})
-      .then(function(){say('— lampe '+(on?'allumée':'éteinte')+' —')})
-      .catch(function(){say('— lampe refusée —')});
-  });
 
   // Cascade du plus exigeant au plus permissif : iOS abandonne parfois
   // au lieu de negocier a la baisse.
-  var TRIES=[
-    ['1080p 60 img/s', {audio:false,video:{facingMode:{ideal:'environment'},
-      width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}}],
-    ['1080p',          {audio:false,video:{facingMode:{ideal:'environment'},
-      width:{ideal:1920},height:{ideal:1080}}}],
-    ['720p',           {audio:false,video:{facingMode:{ideal:'environment'},
-      width:{ideal:1280},height:{ideal:720}}}],
-    ['camera arriere', {audio:false,video:{facingMode:'environment'}}],
-    ['camera par defaut', {audio:false,video:true}]
+  var FLUX=[
+    {label:'1080p', w:1920, h:1080},
+    {label:'4K',    w:3840, h:2160},
+    {label:'720p',  w:1280, h:720}
   ];
-  var attempts=[], hires=true;
+  var level=0, attempts=[];
 
-  function plan(){ return hires ? TRIES : TRIES.slice(2); }
+  function plan(){
+    var f=FLUX[level];
+    return [
+      [f.label+' 60 img/s', {audio:false,video:{facingMode:{ideal:'environment'},
+        width:{ideal:f.w},height:{ideal:f.h},frameRate:{ideal:60}}}],
+      [f.label,             {audio:false,video:{facingMode:{ideal:'environment'},
+        width:{ideal:f.w},height:{ideal:f.h}}}],
+      ['caméra arrière',    {audio:false,video:{facingMode:'environment'}}],
+      ['caméra par défaut', {audio:false,video:true}]
+    ];
+  }
 
   function capabilities(){
     if(!track||!track.getCapabilities){say('— capacités non exposées —');return;}
@@ -286,6 +342,7 @@
     ['focusMode','focusDistance','exposureMode','exposureTime','iso','zoom','torch',
      'whiteBalanceMode'].forEach(function(k){ if(k in c) keys.push(k); });
     say('— pilotable : '+(keys.length?keys.join(', '):'rien')+' —');
+    if(c.zoom) say('— zoom possible de '+c.zoom.min+' à '+c.zoom.max+' —');
   }
 
   function restart(){
@@ -330,6 +387,7 @@
       var st=track.getSettings();
       say('— flux '+st.width+'×'+st.height+' à '+(st.frameRate||'?')+' img/s —');
       capabilities();
+      bindControls();
       if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){});
     }).catch(function(e){
       $('boot').classList.remove('hide');
