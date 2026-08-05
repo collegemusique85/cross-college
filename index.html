@@ -61,6 +61,9 @@
   #boot h1{font-size:19px;font-weight:600;letter-spacing:-.01em}
   #boot p{font-size:13px;color:var(--dim);max-width:32ch;line-height:1.6}
   #boot.hide{display:none}
+  #diag{font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.6;
+    white-space:pre-wrap;text-align:left;max-width:40ch}
+  #diag b{color:var(--measure);font-weight:400}
 </style>
 </head>
 <body>
@@ -71,8 +74,9 @@
 
   <div id="hud">
     <span>img/s <b id="fps">—</b></span>
+    <span>netteté <b id="sharp">—</b></span>
     <span>flux <b id="res">—</b></span>
-    <span>zone <b id="roires">—</b></span>
+    <span>analyse <b id="roires">—</b></span>
     <span>décod. <b id="dms">—</b> ms</span>
   </div>
 
@@ -85,13 +89,14 @@
     </div>
     <div class="row">
       <span>hauteur de zone</span>
-      <input type="range" id="roiH" min="15" max="100" value="45">
-      <span id="roiHv">45 %</span>
+      <input type="range" id="roiH" min="10" max="100" value="30">
+      <span id="roiHv">30 %</span>
     </div>
     <div class="row">
+      <button id="flux">Basculer en 720p</button>
       <button id="torch">Tester la lampe</button>
       <button id="reset">Remettre à zéro</button>
-      <button id="copy">Copier le relevé</button>
+      <button id="copy">Copier</button>
     </div>
     <div id="log"></div>
   </div>
@@ -100,6 +105,7 @@
     <h1>Test de scan — comptage de tours</h1>
     <p>Pose la tablette sur un pied, à hauteur de dossard, face aux coureurs qui arrivent. Fais passer le même dossard dix fois par configuration.</p>
     <button class="go" id="start">Activer la caméra</button>
+    <div id="diag"></div>
   </div>
 </div>
 
@@ -175,18 +181,42 @@
     return side/21;               // QR version 1 : 21 modules de large
   }
 
+  // Largeur cible envoyee au decodeur. Inutile de lui donner 1080 px de large :
+  // 3 a 4 px par module suffisent, et le cout du decodage suit la surface.
+  var TARGET_W=640;
+
+  function sharpness(d,w,h){
+    var s=0,n=0,st=2;
+    for(var y=0;y<h;y+=st){
+      var off=y*w*4;
+      for(var x=0;x<w-st;x+=st){
+        var i=off+x*4, j=off+(x+st)*4;
+        var a=(d[i]*299+d[i+1]*587+d[i+2]*114);
+        var b=(d[j]*299+d[j+1]*587+d[j+2]*114);
+        s+=Math.abs(a-b); n++;
+      }
+    }
+    return n? s/n/1000 : 0;
+  }
+
   function tick(){
     if(!running)return;
     var vw=V.videoWidth, vh=V.videoHeight;
     if(vw&&vh){
       var rh=Math.round(vh*roiRatio);
       var ry=Math.round((vh-rh)/2);
-      if(cv.width!==vw||cv.height!==rh){cv.width=vw;cv.height=rh;
-        $('res').textContent=vw+'×'+vh; $('roires').textContent=vw+'×'+rh;}
-      cx.drawImage(V,0,ry,vw,rh,0,0,vw,rh);
-      var img=cx.getImageData(0,0,vw,rh);
+      var k=Math.min(1, TARGET_W/vw);
+      var dw=Math.max(80,Math.round(vw*k));
+      var dh=Math.max(60,Math.round(rh*k));
+      if(cv.width!==dw||cv.height!==dh){
+        cv.width=dw; cv.height=dh;
+        $('res').textContent=vw+'×'+vh;
+        $('roires').textContent=dw+'×'+dh;
+      }
+      cx.drawImage(V,0,ry,vw,rh,0,0,dw,dh);
+      var img=cx.getImageData(0,0,dw,dh);
       var t0=performance.now();
-      var r=jsQR(img.data,vw,rh,{inversionAttempts:'dontInvert'});
+      var r=jsQR(img.data,dw,dh,{inversionAttempts:'dontInvert'});
       stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
       if(r&&r.data) onHit(r.data, moduleSize(r.location));
       else if(pass.code&&performance.now()-pass.t0>1500) closePass();
@@ -196,6 +226,7 @@
       if(now-stat.fpsAt>500){
         $('fps').textContent=Math.round((stat.frames-stat.fpsN)*1000/(now-stat.fpsAt));
         $('dms').textContent=stat.decodeMs.toFixed(1);
+        $('sharp').textContent=sharpness(img.data,dw,dh).toFixed(1);
         stat.fpsAt=now; stat.fpsN=stat.frames;
       }
     }
@@ -205,6 +236,11 @@
 
   $('roiH').addEventListener('input',function(){
     roiRatio=this.value/100; $('roiHv').textContent=this.value+' %'; layoutGate();
+  });
+  $('flux').addEventListener('click',function(){
+    hires=!hires;
+    this.textContent = hires ? 'Basculer en 720p' : 'Basculer en 1080p';
+    restart();
   });
   $('reset').addEventListener('click',function(){
     totals={passages:0,frames:[],mods:[]}; lines=[]; $('log').textContent='';
@@ -228,12 +264,64 @@
       .catch(function(){say('— lampe refusée —')});
   });
 
-  $('start').addEventListener('click',function(){
-    try{audio=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}catch(e){}
-    navigator.mediaDevices.getUserMedia({audio:false,video:{
-      facingMode:{ideal:'environment'},
-      width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:60}
-    }}).then(function(s){
+  // Cascade du plus exigeant au plus permissif : iOS abandonne parfois
+  // au lieu de negocier a la baisse.
+  var TRIES=[
+    ['1080p 60 img/s', {audio:false,video:{facingMode:{ideal:'environment'},
+      width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}}],
+    ['1080p',          {audio:false,video:{facingMode:{ideal:'environment'},
+      width:{ideal:1920},height:{ideal:1080}}}],
+    ['720p',           {audio:false,video:{facingMode:{ideal:'environment'},
+      width:{ideal:1280},height:{ideal:720}}}],
+    ['camera arriere', {audio:false,video:{facingMode:'environment'}}],
+    ['camera par defaut', {audio:false,video:true}]
+  ];
+  var attempts=[], hires=true;
+
+  function plan(){ return hires ? TRIES : TRIES.slice(2); }
+
+  function capabilities(){
+    if(!track||!track.getCapabilities){say('— capacités non exposées —');return;}
+    var c=track.getCapabilities(), keys=[];
+    ['focusMode','focusDistance','exposureMode','exposureTime','iso','zoom','torch',
+     'whiteBalanceMode'].forEach(function(k){ if(k in c) keys.push(k); });
+    say('— pilotable : '+(keys.length?keys.join(', '):'rien')+' —');
+  }
+
+  function restart(){
+    running=false;
+    if(track){ try{track.stop()}catch(e){} track=null; }
+    setTimeout(function(){ launch(); }, 250);
+  }
+
+  function diag(html){$('diag').innerHTML=html;}
+
+  function openCamera(list,i){
+    if(i>=list.length) return Promise.reject(new Error('aucune configuration acceptee'));
+    return navigator.mediaDevices.getUserMedia(list[i][1]).then(function(s){
+      attempts.push('&nbsp;&nbsp;<b>'+list[i][0]+'</b> : accepté');
+      return s;
+    },function(e){
+      attempts.push('&nbsp;&nbsp;'+list[i][0]+' : '+e.name);
+      diag('Négociation en cours…\n'+attempts.join('\n'));
+      return new Promise(function(r){setTimeout(r,350)}).then(function(){
+        return openCamera(list,i+1);
+      });
+    });
+  }
+
+  function launch(){
+    attempts=[];
+    diag('Ouverture de la caméra…');
+
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+      diag('Aucun accès caméra dans ce navigateur.\n'+
+           'Contexte sécurisé : '+(window.isSecureContext?'oui':'NON')+'\n'+
+           'Protocole : '+location.protocol);
+      return;
+    }
+
+    openCamera(plan(),0).then(function(s){
       V.srcObject=s; track=s.getVideoTracks()[0];
       return V.play();
     }).then(function(){
@@ -241,10 +329,22 @@
       running=true; layoutGate(); stat.fpsAt=performance.now(); tick();
       var st=track.getSettings();
       say('— flux '+st.width+'×'+st.height+' à '+(st.frameRate||'?')+' img/s —');
+      capabilities();
       if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){});
     }).catch(function(e){
-      alert('Caméra indisponible : '+e.name+'\nLa page doit être servie en HTTPS.');
+      $('boot').classList.remove('hide');
+      diag('La caméra n\'a pas démarré.\n\n'+
+           'Tentatives :\n'+attempts.join('\n')+'\n\n'+
+           'Contexte sécurisé : '+(window.isSecureContext?'oui':'NON')+'\n'+
+           'Protocole : '+location.protocol+'\n\n'+
+           'Si toutes les tentatives renvoient AbortError, une autre app ou un autre '+
+           'onglet occupe la caméra. Ferme-les, puis réessaie.');
     });
+  }
+
+  $('start').addEventListener('click',function(){
+    try{audio=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}catch(e){}
+    launch();
   });
 
   window.addEventListener('resize',layoutGate);
