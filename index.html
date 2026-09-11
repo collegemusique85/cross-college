@@ -83,7 +83,8 @@
 
   <div id="panel">
     <div class="row">
-      <button class="big go" id="skip">Terminer et copier</button>
+      <button class="big go" id="save">Enregistrer le fichier</button>
+      <button id="skip">Copier</button>
     </div>
     <div class="row">
       <span>mise au point</span>
@@ -272,7 +273,7 @@
     if(CONT){
       var pmin=Math.min.apply(null,p.mods), pmax=Math.max.apply(null,p.mods);
       record(p.code,'ok',p.frames,pmin,pmax,med(p.sharps),'');
-      tally(p.code); seriesOk++; brief();
+      tally(p.code); seriesOk++; brief(); persist();
     }else showCard(p);
   }
 
@@ -539,17 +540,58 @@
   });
   $('relaunch').addEventListener('click',function(){ restart(true); });
   $('restartAll').addEventListener('click',function(){
-    si=0; pi=0; seriesOk=0; seriesMiss=0; rows=[]; lines=[]; $('log').textContent='';
-    openSetup();
+    if(rows.length && !confirm('Effacer les '+rows.length+' lignes enregistrées ?'))return;
+    si=0; pi=0; seriesOk=0; seriesMiss=0; rows=[]; lines=[];
+    seen={total:0,by:{},fmt:{1:0,2:0,3:0}}; startedAt=0;
+    try{localStorage.removeItem(SKEY)}catch(e){}
+    $('log').textContent=''; openSetup();
   });
-  $('copy').addEventListener('click',function(){
+  function csvText(){
     var ok=rows.filter(function(r){return r[5]==='ok'}).length;
-    var head='# lignes='+rows.length+' réussis='+ok+
-      ' taux='+(rows.length?Math.round(ok*100/rows.length):0)+'%\n';
-    navigator.clipboard.writeText(head+HEAD.join(';')+'\n'+
-      rows.map(function(r){return r.join(';')}).join('\n'))
-      .then(function(){say('— tableau copié ('+rows.length+' lignes) —')},
-            function(){say('— copie refusée —')});
+    return '# tablette='+($('devname').value||'?')+
+      ' lignes='+rows.length+' passages='+ok+
+      ' dossards='+Object.keys(seen.by).length+
+      ' QR130='+seen.fmt[1]+' DM80='+seen.fmt[2]+' DM50='+seen.fmt[3]+'\n'+
+      HEAD.join(';')+'\n'+rows.map(function(r){return r.join(';')}).join('\n');
+  }
+
+  // Sauvegarde locale continue : la page peut recharger sans rien perdre.
+  var SKEY='scanrows';
+  function persist(){
+    try{ localStorage.setItem(SKEY,JSON.stringify({
+      dev:$('devname').value, rows:rows, seen:seen, at:Date.now()})); }catch(e){}
+  }
+  function restore(){
+    try{
+      var o=JSON.parse(localStorage.getItem(SKEY)||'null');
+      if(o&&o.rows&&o.rows.length){
+        rows=o.rows; if(o.seen)seen=o.seen;
+        if(o.dev&&!$('devname').value)$('devname').value=o.dev;
+        say('— '+rows.length+' lignes récupérées de la session précédente —');
+      }
+    }catch(e){}
+  }
+  restore();
+
+  $('save').addEventListener('click',function(){
+    if(!rows.length){say('— rien à enregistrer —');return;}
+    var name='scan-'+($('devname').value||'tablette')+'-'+
+      new Date().toISOString().slice(0,16).replace(/[:T]/g,'')+'.csv';
+    try{
+      var blob=new Blob(['\ufeff'+csvText()],{type:'text/csv;charset=utf-8'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download=name; a.style.display='none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){URL.revokeObjectURL(url);a.remove()},2000);
+      say('— fichier '+name+' enregistré —');
+    }catch(e){ say('— enregistrement refusé, utilise « Copier » —'); }
+  });
+
+  $('copy').addEventListener('click',function(){
+    navigator.clipboard.writeText(csvText())
+      .then(function(){say('— tableau copié ('+rows.length+' lignes), colle-le TOUT DE SUITE —')},
+            function(){say('— copie refusée, utilise « Enregistrer le fichier » —')});
   });
   // --- reprise apres mise en veille : iOS termine le flux sans prevenir -----
   var wake=null;
