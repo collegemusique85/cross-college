@@ -83,8 +83,7 @@
 
   <div id="panel">
     <div class="row">
-      <button class="big bad" id="miss">Passage raté</button>
-      <button class="big go" id="skip">Série suivante →</button>
+      <button class="big go" id="skip">Terminer et copier</button>
     </div>
     <div class="row">
       <span>mise au point</span>
@@ -92,11 +91,12 @@
       <span id="focusv">auto</span>
     </div>
     <div class="row">
-      <input type="text" id="devname" placeholder="nom de l'appareil"
-        style="width:130px;background:#171B1E;border:1px solid #2E3538;color:var(--paper);
-        padding:10px;font:inherit;font-size:13px">
-      <button id="dec">Décodeur : zxing</button>
-      <button id="cont">Mode : guidé</button>
+      <span>tablette</span>
+      <input type="text" id="devname" placeholder="ex. tab1"
+        style="flex:1;background:#171B1E;border:1px solid var(--measure);color:var(--paper);
+        padding:10px;font:inherit;font-size:15px" oninput="try{localStorage.setItem('dev',this.value)}catch(e){}">
+      <button id="dec" style="display:none">Décodeur : zxing</button>
+      <button id="cont" style="display:none">Mode : guidé</button>
       <button id="autofocus">Point auto</button>
       <button id="copy">Copier le tableau</button>
       <button id="relaunch">Relancer la caméra</button>
@@ -127,9 +127,9 @@
   </div>
 
   <div class="sheet on" id="boot">
-    <h1>Protocole de test — comptage de tours</h1>
-    <p>Quatre séries de huit passages en courant. La page règle le flux et le zoom
-       toute seule ; tu ne t'occupes que de la position de la tablette.</p>
+    <h1>Course de test — comptage de tours</h1>
+    <p>Donne un nom à cette tablette, puis active la caméra. Tout le reste se règle
+       tout seul : il n'y aura plus rien à toucher pendant la course.</p>
     <button class="go big" id="start" style="max-width:280px">Activer la caméra</button>
     <div id="diag"></div>
   </div>
@@ -142,27 +142,9 @@
   "use strict";
 
   var PROTO=[
-    {t:'1 — QR A5 (référence)', sheet:'142', n:5,
-     pose:"Les 3 iPads CÔTE À CÔTE, même hauteur de dossard, tous pointés dans l'axe de ton élan. Prends 15 m d'élan. Feuille 142.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'2 — DataMatrix 120 mm', sheet:'242', n:5,
-     pose:"Ne bouge aucun iPad. Change seulement de feuille : prends le 242.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'3 — DataMatrix 80 mm', sheet:'243', n:5,
-     pose:"Toujours rien à bouger. Feuille 243.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'4 — DataMatrix 50 mm', sheet:'244', n:5,
-     pose:"Toujours rien à bouger. Feuille 244.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'5 — Redondance échelonnée', sheet:'242', n:10,
-     pose:"ÉCHELONNE les iPads le long du couloir : le 1er à 8 m à gauche, le 2e à 4 m à droite, le 3e à 1,5 m à gauche et plus haut. Feuille 242.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'6 — Dossard maltraité', sheet:'242', n:5,
-     pose:"IPads inchangés. Plie la feuille en deux, cache-en un coin avec ton bras, ou tiens-la de travers. Un passage abîmé différemment à chaque fois.",
-     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true},
-    {t:'7 — Point verrouillé (bonus)', sheet:'242', n:5,
-     pose:"iPads inchangés, feuille 242. La mise au point se verrouille automatiquement à mi-course de la plage.",
-     level:0, zoom:1, focus:0.5, dec:'zxing', cont:true}
+    {t:'Course de test — session unique', sheet:'—', n:250,
+     pose:"Place ta tablette au bord du couloir, à hauteur de poitrine, l'objectif tourné vers les coureurs qui ARRIVENT. Ne la déplace plus jusqu'à la fin de la course.",
+     level:0, zoom:1, focus:'auto', dec:'zxing', cont:true}
   ];
   var FLUX=[{label:'1080p',w:1920,h:1080},{label:'720p',w:1280,h:720},{label:'4K',w:3840,h:2160}];
 
@@ -173,14 +155,38 @@
   var stat={frames:0,fpsAt:0,fpsN:0,decodeMs:0};
   var pass={code:null,frames:0,mods:[],sharps:[],t0:0,shot:null,snap:null};
   var lines=[], rows=[], seriesOk=0, seriesMiss=0;
+  var seen={total:0,by:{},fmt:{1:0,2:0,3:0}}, startedAt=0;
+
+  function famille(code){
+    var n=parseInt(code,10);
+    if(n>=100&&n<200)return 1;
+    if(n>=200&&n<300)return 2;
+    if(n>=300&&n<400)return 3;
+    return 0;
+  }
+  function fmtLine(){
+    return 'QR130 '+seen.fmt[1]+'  ·  DM80 '+seen.fmt[2]+'  ·  DM50 '+seen.fmt[3];
+  }
+  function tally(code){
+    if(!startedAt)startedAt=Date.now();
+    seen.total++;
+    seen.by[code]=(seen.by[code]||0)+1;
+    var f=famille(code); if(f)seen.fmt[f]++;
+  }
   var HEAD=['heure','serie','consigne','code_attendu','code_lu','statut','images',
             'px_min','px_max','dist_estimee_m','distance_saisie_m','nettete','zoom',
             'mise_au_point','flux','img_s','analyse','decod_ms'];
 
   // 1080p, dossard A5 : 3,7 px/module a 2 m en zoom x1 => produit constant 7,4 px.m
-  function estDist(px,zoom){
+  // Cote imprime du code, par famille de numero (mm). Sert a estimer la distance.
+  var COTE={1:130,2:80,3:50};
+  function estDist(px,zoom,code){
     if(!px||!zoom)return '';
-    return (7.4*zoom/px).toFixed(1);
+    var f=famille(code), mm=COTE[f];
+    if(!mm)return '';
+    // calibration 1080p : un module de 4.83 mm donne 3.7 px/module a 2 m en zoom x1
+    var modmm = mm/((f===1)?29:12);
+    return (2*zoom*(3.7/4.83)*modmm/px).toFixed(1);
   }
 
   function $(id){return document.getElementById(id)}
@@ -212,11 +218,12 @@
     var s=PROTO[si];
     if(!s){ $('bStep').textContent='PROTOCOLE TERMINÉ';
       $('bTitle').textContent='Copie le tableau'; $('bCode').textContent=''; return; }
-    $('bStep').textContent='SÉRIE '+(si+1)+'/'+PROTO.length+
-      ' · DÉTECTÉS '+seriesOk+' / '+s.n+' PASSAGES À FAIRE';
-    $('bTitle').textContent=s.t;
-    $('bCode').textContent='Feuille '+s.sheet+
-      (seriesOk>=s.n?'  —  série complète, va appuyer sur « série suivante »':'');
+    var mn=(startedAt?(Date.now()-startedAt)/60000:0);
+    $('bStep').textContent=seen.total+' PASSAGES · '+
+      Object.keys(seen.by).length+' DOSSARDS VUS · '+
+      (mn>0.2?(seen.total/mn).toFixed(0):'—')+' /min';
+    $('bTitle').textContent=$('devname').value||'tablette sans nom';
+    $('bCode').textContent=fmtLine();
   }
 
   // ---- mesures ------------------------------------------------------------
@@ -240,14 +247,14 @@
     var z=st.zoom!=null?+st.zoom:1;
     rows.push([clock(), (si+1), s.t, s.sheet, codeLu, statut, frames,
       pmin===''?'':pmin.toFixed(1), pmax===''?'':pmax.toFixed(1),
-      pmin===''?'':estDist(pmin,z), dist||'',
+      pmin===''?'':estDist(pmin,z,codeLu), dist||'',
       net===''?'':net.toFixed(1), z.toFixed(1),
       st.focusDistance!=null?(+st.focusDistance).toFixed(2):'auto',
       (V.videoWidth||'')+'x'+(V.videoHeight||''), $('fps').textContent,
       $('roires').textContent, stat.decodeMs.toFixed(1), DEC,
       $('devname').value||'?']);
-    say(clock()+'  S'+(si+1)+'  '+statut+'  '+codeLu+'  '+frames+' img  '+
-        (pmin===''?'—':'détecté vers '+estDist(pmin,z)+' m'));
+    say(clock()+'  '+codeLu+'  '+frames+' img  '+
+        (pmin===''?'':'~'+estDist(pmin,z,codeLu)+' m'));
   }
 
   function advance(){
@@ -265,7 +272,7 @@
     if(CONT){
       var pmin=Math.min.apply(null,p.mods), pmax=Math.max.apply(null,p.mods);
       record(p.code,'ok',p.frames,pmin,pmax,med(p.sharps),'');
-      seriesOk++; brief();
+      tally(p.code); seriesOk++; brief();
     }else showCard(p);
   }
 
@@ -372,7 +379,7 @@
     }
     busy=true;
     ZXingWASM.readBarcodes(img,{formats:['QRCode','DataMatrix'],tryHarder:false,tryRotate:true,
-      maxNumberOfSymbols:4}).then(function(res){
+      maxNumberOfSymbols:8}).then(function(res){
       busy=false;
       stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
       if(!res||!res.length){cb(null);return;}
@@ -483,6 +490,8 @@
   }
 
   // ---- interactions -------------------------------------------------------
+  try{ var d=localStorage.getItem('dev'); if(d)$('devname').value=d; }catch(e){}
+
   $('start').addEventListener('click',function(){
     try{audio=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}catch(e){}
     launch(false);
@@ -501,15 +510,8 @@
     $('card').classList.remove('on'); armed=true; brief();
     say('— passage écarté —');
   });
-  $('miss').addEventListener('click',function(){
-    if(!armed)return;
-    record('—','RATÉ',0,'','','','');
-    seriesMiss++; advance();
-  });
-  $('skip').addEventListener('click',function(){
-    if(si>=PROTO.length)return;
-    si++; pi=0; seriesOk=0; seriesMiss=0; openSetup();
-  });
+
+  $('skip').addEventListener('click',function(){ $('copy').click(); });
   $('focus').addEventListener('input',function(){
     if(!track||!track.getCapabilities)return;
     var c=track.getCapabilities().focusDistance; if(!c)return;
