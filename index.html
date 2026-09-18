@@ -83,8 +83,12 @@
 
   <div id="panel">
     <div class="row">
-      <button class="big go" id="save">Enregistrer le fichier</button>
-      <button id="skip">Copier</button>
+      <button class="big bad" id="miss">PASSAGE RATÉ</button>
+    </div>
+    <div class="row">
+      <span>zone</span>
+      <input type="range" id="zone" min="40" max="100" value="92">
+      <span id="zonev">92 %</span>
     </div>
     <div class="row">
       <span>mise au point</span>
@@ -99,9 +103,13 @@
       <button id="dec" style="display:none">Décodeur : zxing</button>
       <button id="cont" style="display:none">Mode : guidé</button>
       <button id="autofocus">Point auto</button>
-      <button id="copy">Copier le tableau</button>
       <button id="relaunch">Relancer la caméra</button>
       <button id="restartAll">Tout recommencer</button>
+    </div>
+    <div class="row">
+      <button class="big go" id="save">Enregistrer le fichier</button>
+      <button id="skip">Copier</button>
+      <button id="copy" style="display:none">Copier le tableau</button>
     </div>
     <div id="log"></div>
   </div>
@@ -144,19 +152,19 @@
 
   var PROTO=[
     {t:'Course de test — session unique', sheet:'—', n:250,
-     pose:"Place ta tablette au bord du couloir, à hauteur de poitrine, l'objectif tourné vers les coureurs qui ARRIVENT. Ne la déplace plus jusqu'à la fin de la course.",
+     pose:"iPad FIXE : sur le pupitre en entrée de couloir, à hauteur de poitrine, objectif vers les coureurs qui arrivent — ne plus y toucher.  |  iPad TENU : 4 à 5 m plus loin, décalé sur le côté ; tu vises chaque coureur jusqu'au vert, et tu appuies sur PASSAGE RATÉ si l'écran ne verdit pas.",
      level:0, zoom:1, focus:'auto', dec:'zxing', cont:true}
   ];
   var FLUX=[{label:'1080p',w:1920,h:1080},{label:'720p',w:1280,h:720},{label:'4K',w:3840,h:2160}];
 
   var V=document.getElementById('v'), FLOOD=document.getElementById('flood');
   var cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
-  var track=null, roiW=0.55, roiH=0.28, audio=null, running=false, epoch=0, level=0;
+  var track=null, roiW=0.92, roiH=0.60, audio=null, running=false, epoch=0, level=0;
   var si=0, pi=0, armed=false, attempts=[];
   var stat={frames:0,fpsAt:0,fpsN:0,decodeMs:0};
   var pass={code:null,frames:0,mods:[],sharps:[],t0:0,shot:null,snap:null};
   var lines=[], rows=[], seriesOk=0, seriesMiss=0;
-  var seen={total:0,by:{},fmt:{1:0,2:0,3:0}}, startedAt=0;
+  var seen={total:0,miss:0,by:{},fmt:{1:0,2:0,3:0}}, startedAt=0;
 
   function famille(code){
     var n=parseInt(code,10);
@@ -166,7 +174,8 @@
     return 0;
   }
   function fmtLine(){
-    return 'QR130 '+seen.fmt[1]+'  ·  DM80 '+seen.fmt[2]+'  ·  DM50 '+seen.fmt[3];
+    return 'QR '+seen.fmt[1]+'  ·  DM '+seen.fmt[2]+
+           (seen.miss?'  ·  ratés '+seen.miss:'');
   }
   function tally(code){
     if(!startedAt)startedAt=Date.now();
@@ -209,7 +218,16 @@
   }
 
   function layoutGate(){
-    var g=$('gate'), w=Math.round(innerWidth*roiW), h=Math.round(innerHeight*roiH);
+    var g=$('gate'), vw=V.videoWidth, vh=V.videoHeight;
+    var w, h;
+    if(vw&&vh){
+      // object-fit: cover -> la video est agrandie puis rognee
+      var k=Math.max(innerWidth/vw, innerHeight/vh);
+      w=Math.round(vw*roiW*k); h=Math.round(vh*roiH*k);
+    }else{
+      w=Math.round(innerWidth*roiW); h=Math.round(innerHeight*roiH);
+    }
+    w=Math.min(w,innerWidth); h=Math.min(h,innerHeight);
     g.style.width=w+'px'; g.style.height=h+'px';
     g.style.left=Math.round((innerWidth-w)/2)+'px';
     g.style.top=Math.round((innerHeight-h)/2)+'px';
@@ -220,8 +238,8 @@
     if(!s){ $('bStep').textContent='PROTOCOLE TERMINÉ';
       $('bTitle').textContent='Copie le tableau'; $('bCode').textContent=''; return; }
     var mn=(startedAt?(Date.now()-startedAt)/60000:0);
-    $('bStep').textContent=seen.total+' PASSAGES · '+
-      Object.keys(seen.by).length+' DOSSARDS VUS · '+
+    $('bStep').textContent=seen.total+' LUS · '+seen.miss+' RATÉS · '+
+      Object.keys(seen.by).length+' DOSSARDS · '+
       (mn>0.2?(seen.total/mn).toFixed(0):'—')+' /min';
     $('bTitle').textContent=$('devname').value||'tablette sans nom';
     $('bCode').textContent=fmtLine();
@@ -402,7 +420,7 @@
     if(vw&&vh){
       var sw=Math.round(vw*roiW), sh=Math.round(vh*roiH);
       var sx=Math.round((vw-sw)/2), sy=Math.round((vh-sh)/2);
-      var budget=(DEC==='zxing')?700000:320000;
+      var budget=(DEC==='zxing')?1400000:320000;
       var k=Math.min(1,Math.sqrt(budget/(sw*sh)));
       var dw=Math.max(80,Math.round(sw*k)), dh=Math.max(60,Math.round(sh*k));
       if(cv.width!==dw||cv.height!==dh){
@@ -473,7 +491,8 @@
       V.srcObject=s; track=s.getVideoTracks()[0]; return V.play();
     }).then(function(){
       $('boot').classList.remove('on');
-      running=true; layoutGate(); stat.fpsAt=performance.now(); epoch++; tick(epoch);
+      running=true; layoutGate(); setTimeout(layoutGate,400);
+      stat.fpsAt=performance.now(); epoch++; tick(epoch);
       var st=settings();
       say('— flux '+st.width+'×'+st.height+' à '+(st.frameRate||'?')+' img/s —');
       bindControls(); applySeries(); watchTrack(); reWake();
@@ -521,6 +540,21 @@
       $('focusv').textContent=v.toFixed(2);
     },function(){$('focusv').textContent='refusé'});
   });
+  $('zone').addEventListener('click',function(){});
+  $('zone').addEventListener('input',function(){
+    var v=this.value/100;
+    roiW=v; roiH=Math.max(0.30, v*0.65);
+    $('zonev').textContent=this.value+' %';
+    layoutGate();
+  });
+  $('miss').addEventListener('click',function(){
+    record('—','RATÉ',0,'','','','');
+    seen.miss++; brief(); persist();
+    var b=this, old=b.style.background;
+    b.style.background='#993C1D';
+    setTimeout(function(){b.style.background=old},250);
+    if(navigator.vibrate)navigator.vibrate(40);
+  });
   $('cont').addEventListener('click',function(){
     CONT=!CONT; armed=true;
     this.textContent='Mode : '+(CONT?'continu':'guidé');
@@ -542,7 +576,7 @@
   $('restartAll').addEventListener('click',function(){
     if(rows.length && !confirm('Effacer les '+rows.length+' lignes enregistrées ?'))return;
     si=0; pi=0; seriesOk=0; seriesMiss=0; rows=[]; lines=[];
-    seen={total:0,by:{},fmt:{1:0,2:0,3:0}}; startedAt=0;
+    seen={total:0,miss:0,by:{},fmt:{1:0,2:0,3:0}}; startedAt=0;
     try{localStorage.removeItem(SKEY)}catch(e){}
     $('log').textContent=''; openSetup();
   });
@@ -550,8 +584,9 @@
     var ok=rows.filter(function(r){return r[5]==='ok'}).length;
     return '# tablette='+($('devname').value||'?')+
       ' lignes='+rows.length+' passages='+ok+
+      ' rates='+seen.miss+
       ' dossards='+Object.keys(seen.by).length+
-      ' QR130='+seen.fmt[1]+' DM80='+seen.fmt[2]+' DM50='+seen.fmt[3]+'\n'+
+      ' QR='+seen.fmt[1]+' DM='+seen.fmt[2]+'\n'+
       HEAD.join(';')+'\n'+rows.map(function(r){return r.join(';')}).join('\n');
   }
 
