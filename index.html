@@ -86,9 +86,28 @@
       <button class="big bad" id="miss">PASSAGE RATÉ</button>
     </div>
     <div class="row">
-      <span>zone</span>
-      <input type="range" id="zone" min="40" max="100" value="92">
-      <span id="zonev">92 %</span>
+      <span>largeur</span>
+      <input type="range" id="zoneW" min="15" max="100" value="92">
+      <span id="zoneWv">92 %</span>
+    </div>
+    <div class="row">
+      <span>hauteur</span>
+      <input type="range" id="zoneH" min="15" max="100" value="60">
+      <span id="zoneHv">60 %</span>
+    </div>
+    <div class="row">
+      <span>son</span>
+      <select id="tone" style="flex:1;background:#171B1E;border:1px solid #2E3538;
+        color:var(--paper);padding:10px;font:inherit;font-size:14px">
+        <option value="0">1 — grave</option>
+        <option value="1">2 — médium</option>
+        <option value="2">3 — aigu</option>
+        <option value="3">4 — double bip</option>
+        <option value="4">5 — montant</option>
+        <option value="5">6 — descendant</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;white-space:nowrap">
+        <input type="checkbox" id="speak" checked> dire le numéro</label>
     </div>
     <div class="row">
       <span>mise au point</span>
@@ -206,15 +225,54 @@
   function say(s){lines.unshift(s);if(lines.length>40)lines.pop();$('log').textContent=lines.join('\n')}
   function diag(h){$('diag').innerHTML=h}
 
+  // Six signatures sonores, reconnaissables a l'oreille d'une tablette a l'autre.
+  var TONES=[
+    [[440,0.00,0.18]],
+    [[660,0.00,0.18]],
+    [[1000,0.00,0.18]],
+    [[880,0.00,0.08],[880,0.12,0.08]],
+    [[520,0.00,0.08],[780,0.09,0.12]],
+    [[900,0.00,0.08],[600,0.09,0.12]]
+  ];
   function beep(){
     if(!audio)return;
-    var o=audio.createOscillator(), g=audio.createGain();
-    o.connect(g); g.connect(audio.destination);
-    o.frequency.value=1180;
-    g.gain.setValueAtTime(0.0001,audio.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.32,audio.currentTime+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+0.12);
-    o.start(); o.stop(audio.currentTime+0.13);
+    var seq=TONES[+($('tone')?$('tone').value:0)]||TONES[0], t0=audio.currentTime;
+    seq.forEach(function(n){
+      var o=audio.createOscillator(), g=audio.createGain();
+      o.type='square';                       // plus perçant qu'une sinusoide
+      o.frequency.value=n[0];
+      o.connect(g); g.connect(audio.destination);
+      var s=t0+n[1], e=s+n[2];
+      g.gain.setValueAtTime(0.0001,s);
+      g.gain.exponentialRampToValueAtTime(0.9,s+0.01);
+      g.gain.setValueAtTime(0.9,e-0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,e);
+      o.start(s); o.stop(e+0.01);
+    });
+  }
+
+  // Annonce vocale du numero. On ne laisse jamais la file s'allonger :
+  // un numero annonce en retard est pire qu'un numero non annonce.
+  var voiceFR=null;
+  function pickVoice(){
+    if(!window.speechSynthesis)return;
+    var vs=speechSynthesis.getVoices();
+    voiceFR=vs.filter(function(v){return /^fr/i.test(v.lang)})[0]||null;
+  }
+  if(window.speechSynthesis){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+  function speak(code){
+    if(!window.speechSynthesis||!$('speak').checked)return;
+    try{
+      if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
+      var u=new SpeechSynthesisUtterance(String(code));
+      u.lang='fr-FR'; if(voiceFR)u.voice=voiceFR;
+      u.rate=1.25; u.volume=1;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  // iOS n'autorise la synthese vocale qu'apres un geste : on l'amorce au demarrage.
+  function primeSpeech(){
+    try{ var u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); }catch(e){}
   }
 
   function layoutGate(){
@@ -241,7 +299,8 @@
     $('bStep').textContent=seen.total+' LUS · '+seen.miss+' RATÉS · '+
       Object.keys(seen.by).length+' DOSSARDS · '+
       (mn>0.2?(seen.total/mn).toFixed(0):'—')+' /min';
-    $('bTitle').textContent=$('devname').value||'tablette sans nom';
+    $('bTitle').textContent=($('devname').value||'tablette sans nom')+
+      (DEC!=='zxing'?'  ⚠ décodeur dégradé':'');
     $('bCode').textContent=fmtLine();
   }
 
@@ -306,7 +365,7 @@
       try{ snap=cv.toDataURL('image/jpeg',0.55); }catch(e){}
       pass={code:code,frames:1,mods:[modulePx],sharps:[net],t0:now,snap:snap};
       $('floodNum').textContent=code;
-      FLOOD.classList.add('on'); beep();
+      FLOOD.classList.add('on'); beep(); setTimeout(function(){speak(code)},220);
       setTimeout(function(){FLOOD.classList.remove('on')},600);
     }
   }
@@ -371,9 +430,33 @@
 
   // ---- decodeurs ----------------------------------------------------------
   var DEC='zxing', busy=false;
-  try{ if(window.ZXingWASM&&ZXingWASM.prepareZXingModule)
-        ZXingWASM.prepareZXingModule({fireImmediately:true}); }catch(e){ DEC='jsqr'; }
-  if(!window.ZXingWASM) DEC='jsqr';
+  var zxErrors=0, zxReady=false;
+  function prepareZX(){
+    if(!window.ZXingWASM||!ZXingWASM.prepareZXingModule)return;
+    try{
+      var p=ZXingWASM.prepareZXingModule({fireImmediately:true});
+      if(p&&p.then) p.then(function(){ zxReady=true; zxErrors=0;
+        if(DEC!=='zxing'){ DEC='zxing'; alarm(false); say('— zxing prêt —'); } },
+        function(){ alarm(true); });
+      else zxReady=true;
+    }catch(e){ alarm(true); }
+  }
+  // Bandeau rouge permanent tant que le decodeur principal n'est pas actif.
+  function alarm(on){
+    var b=document.getElementById('decAlarm');
+    if(!b){
+      b=document.createElement('div'); b.id='decAlarm';
+      b.style.cssText='position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);'+
+        'z-index:5;background:#A32D2D;color:#fff;text-align:center;padding:18px;'+
+        'font:600 18px -apple-system,system-ui,sans-serif;display:none';
+      b.innerHTML='DÉCODEUR DÉGRADÉ — le DataMatrix n\'est pas lu<br>'+
+        '<span style="font-weight:400;font-size:14px">Vérifier le réseau, puis appuyer sur « Relancer la caméra »</span>';
+      document.getElementById('stage').appendChild(b);
+    }
+    b.style.display=on?'block':'none';
+  }
+  if(!window.ZXingWASM){ DEC='jsqr'; setTimeout(function(){alarm(true)},1500); }
+  else prepareZX();
 
   // QR version 1 : 21 modules de large. DataMatrix 10x10 : 10.
   function sideModules(fmt){
@@ -399,15 +482,21 @@
     busy=true;
     ZXingWASM.readBarcodes(img,{formats:['QRCode','DataMatrix'],tryHarder:false,tryRotate:true,
       maxNumberOfSymbols:8}).then(function(res){
-      busy=false;
+      busy=false; zxErrors=0;
       stat.decodeMs=stat.decodeMs*0.9+(performance.now()-t0)*0.1;
       if(!res||!res.length){cb(null);return;}
       cb(res.map(function(r){
         return {text:(r.text!=null?r.text:(r.rawValue||'')), mod:corners(r)};
       }).filter(function(o){return o.text}));
     },function(err){
-      busy=false; DEC='jsqr'; $('dec').textContent='Décodeur : jsqr';
-      say('— zxing indisponible, retour à jsqr —'); cb(null);
+      busy=false; zxErrors++;
+      // Une erreur isolee ne doit pas faire basculer : on n'abandonne qu'apres 10 d'affilee.
+      if(zxErrors>=10){
+        DEC='jsqr'; $('dec').textContent='Décodeur : jsqr';
+        say('— zxing en échec, décodeur dégradé —'); alarm(true);
+        setTimeout(prepareZX,5000);
+      }
+      cb(null);
     });
   }
 
@@ -514,6 +603,7 @@
 
   $('start').addEventListener('click',function(){
     try{audio=new (window.AudioContext||window.webkitAudioContext)();audio.resume();}catch(e){}
+    primeSpeech();
     launch(false);
   });
   $('sReady').addEventListener('click',function(){
@@ -540,13 +630,28 @@
       $('focusv').textContent=v.toFixed(2);
     },function(){$('focusv').textContent='refusé'});
   });
-  $('zone').addEventListener('click',function(){});
-  $('zone').addEventListener('input',function(){
-    var v=this.value/100;
-    roiW=v; roiH=Math.max(0.30, v*0.65);
-    $('zonev').textContent=this.value+' %';
-    layoutGate();
+  function saveUI(){
+    try{ localStorage.setItem('ui',JSON.stringify({w:roiW,h:roiH,
+      tone:$('tone').value, speak:$('speak').checked})); }catch(e){}
+  }
+  $('zoneW').addEventListener('input',function(){
+    roiW=this.value/100; $('zoneWv').textContent=this.value+' %'; layoutGate(); saveUI();
   });
+  $('zoneH').addEventListener('input',function(){
+    roiH=this.value/100; $('zoneHv').textContent=this.value+' %'; layoutGate(); saveUI();
+  });
+  $('tone').addEventListener('change',function(){ saveUI(); beep(); });
+  $('speak').addEventListener('change',saveUI);
+  try{
+    var ui=JSON.parse(localStorage.getItem('ui')||'null');
+    if(ui){
+      roiW=ui.w; roiH=ui.h;
+      $('zoneW').value=Math.round(ui.w*100); $('zoneWv').textContent=Math.round(ui.w*100)+' %';
+      $('zoneH').value=Math.round(ui.h*100); $('zoneHv').textContent=Math.round(ui.h*100)+' %';
+      if(ui.tone!=null)$('tone').value=ui.tone;
+      if(ui.speak!=null)$('speak').checked=ui.speak;
+    }
+  }catch(e){}
   $('miss').addEventListener('click',function(){
     record('—','RATÉ',0,'','','','');
     seen.miss++; brief(); persist();
@@ -572,7 +677,10 @@
     track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(function(){});
     $('focusv').textContent='auto';
   });
-  $('relaunch').addEventListener('click',function(){ restart(true); });
+  $('relaunch').addEventListener('click',function(){
+    if(DEC!=='zxing'&&window.ZXingWASM){ zxErrors=0; DEC='zxing'; prepareZX(); alarm(false); }
+    restart(true);
+  });
   $('restartAll').addEventListener('click',function(){
     if(rows.length && !confirm('Effacer les '+rows.length+' lignes enregistrées ?'))return;
     si=0; pi=0; seriesOk=0; seriesMiss=0; rows=[]; lines=[];
