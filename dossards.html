@@ -6,30 +6,36 @@
 <title>Dossards — Cross</title>
 <link rel="stylesheet" href="style.css">
 <style>
-  @page{size:A4 portrait;margin:0}
+  /* Feuille dessinée à 190 × 270 mm : elle tient dans une A4 même si le navigateur
+     ajoute ses propres marges (Safari), au lieu de déborder et de décaler toutes les pages. */
+  @page{size:A4 portrait;margin:10mm}
   .ctrl{max-width:1000px;margin:0 auto;padding:20px 16px}
   .ctrl .row{margin-top:10px}
   #sheets{display:flex;flex-direction:column;align-items:center;gap:18px;padding:10px 0 40px}
-  .sheet{width:210mm;height:297mm;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18);display:grid;grid-template-rows:148.5mm 148.5mm;overflow:hidden}
-  .half{position:relative;display:flex;align-items:center;padding:0 9mm;gap:8mm}
+  .sheet{width:190mm;height:270mm;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18);display:grid;grid-template-rows:135mm 135mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+  .half{position:relative;display:flex;align-items:center;padding:0 4mm 6mm;gap:4mm}
   .half + .half{border-top:.3mm dashed #BBB}
   .half svg{width:120mm;height:120mm;flex:none;shape-rendering:crispEdges}
-  .num{flex:1;text-align:center;font:800 38mm/1 Helvetica,Arial,sans-serif;letter-spacing:-.02em;color:#000}
-  .num.l4{font-size:28mm}
-  .foot{position:absolute;left:9mm;right:9mm;bottom:5mm;display:flex;justify-content:space-between;font:11pt Helvetica,Arial,sans-serif;color:#333}
+  .num{flex:1;min-width:0;text-align:center;font:800 38mm/1 Helvetica,Arial,sans-serif;letter-spacing:-.03em;color:#000}
+  .num.l3{font-size:29mm}
+  .num.l4{font-size:21mm}
+  .foot{position:absolute;left:4mm;right:4mm;bottom:3mm;display:flex;justify-content:space-between;font:11pt Helvetica,Arial,sans-serif;color:#333}
   .foot .pin{color:#999;font-size:8pt}
   @media print{
     body{background:#fff}
     .ctrl,.banner{display:none!important}
-    #sheets{padding:0;gap:0}
+    #sheets{display:block;padding:0}
+    .sheet{margin:0 auto}
     .sheet{box-shadow:none;page-break-after:always;break-after:page}
+    .sheet:last-child{page-break-after:auto;break-after:auto}
   }
 </style>
 </head>
 <body>
 <div class="ctrl">
   <h1 style="font-size:22px">Impression des dossards</h1>
-  <p class="muted">Deux dossards par feuille A4, QR code de 12 cm. <b>Imprimer à l'échelle 100 %</b> (jamais « ajuster à la page »), sur papier ou carton mat, sans plastification.</p>
+  <p class="muted">Deux dossards par feuille A4, QR code de 12 cm. <b>Imprimer à l'échelle 100 %</b> (jamais « ajuster à la page »), sur papier ou carton mat, sans plastification.
+    Avec Safari : dans la fenêtre d'impression, décochez « Imprimer les en-têtes et bas de page ». Vérifiez que le nombre de pages annoncé correspond au nombre de feuilles indiqué ci-dessous.</p>
   <div class="row">
     <label>Quels dossards
       <select id="sel">
@@ -84,7 +90,7 @@ function liste(){
 }
 function draw(){
   const L=liste(), wn=$('withNames').checked;
-  const half=x=>x?`<div class="half">${qrSvg(x.d)}<div class="num${String(x.d).length>3?' l4':''}">${x.d}</div>
+  const half=x=>x?`<div class="half">${qrSvg(x.d)}<div class="num${String(x.d).length>3?' l4':String(x.d).length>2?' l3':''}">${x.d}</div>
     <div class="foot"><span>${wn?esc(x.bas):''}</span><span class="pin">épingler aux 4 coins</span></div></div>`:'<div class="half"></div>';
   let h='';
   for(let i=0;i<L.length;i+=2) h+=`<div class="sheet">${half(L[i])}${half(L[i+1])}</div>`;
