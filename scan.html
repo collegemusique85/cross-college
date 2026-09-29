@@ -59,6 +59,14 @@
   #kbKeys button.v{background:var(--go);color:var(--go-ink)}
   #kbKeys button.v:disabled{opacity:.35}
 
+  /* mode « absents » : tout est bleu pour ne jamais le confondre avec le scan de course */
+  body.abs #topbar{background:linear-gradient(#1E4FA8,#1E4FA8CC)}
+  body.abs #flood{background:#2F6FDE;color:#fff}
+  #flood.warn{background:var(--bad)!important;color:#fff!important}
+  #flood.same{background:#5B6670!important;color:#fff!important}
+  #undoBtn{display:none}
+  body.abs #undoBtn{display:block}
+  body.abs #callBtn{display:none}
   #alarm{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);z-index:5;background:var(--bad);color:#fff;text-align:center;padding:18px;font-weight:600;display:none}
 </style>
 </head>
@@ -79,6 +87,7 @@
   <div id="bottombar">
     <button class="bb" id="kbBtn">⌨︎  Taper un numéro</button>
     <button class="bb" id="callBtn">Appeler</button>
+    <button class="bb" id="undoBtn">Annuler le dernier</button>
     <button class="bb" id="setBtn" aria-label="Réglages">⚙</button>
   </div>
 
@@ -132,8 +141,15 @@
 <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script type="module">
-import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES} from './app.js';
-$('menuLinks').innerHTML=PAGES.filter(([h])=>h!=='scan.html').map(([h,l])=>'<a class="btn" href="'+h+'">'+l+'</a>').join('');
+import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES,readCfg,courseDe} from './app.js';
+// scan.html?mode=absents : on scanne les dossards récupérés le matin ; l'élève est noté « absent ».
+const ABS=new URLSearchParams(location.search).get('mode')==='absents';
+if(ABS){
+  document.body.classList.add('abs'); document.title='Absents — Cross';
+  document.querySelector('#boot h2').textContent='Dossards des absents et dispensés';
+  document.querySelector('#boot p').textContent='Scanne les dossards récupérés le matin. Écran bleu : l\'élève est noté absent et ne compte plus dans le suivi. Écran gris : déjà noté. Écran rouge : dossard inconnu, ou sa course est déjà partie (rien n\'est enregistré). Une erreur ? « Annuler le dernier ».';
+}
+$('menuLinks').innerHTML=PAGES.filter(([h])=>h!==(ABS?'scan.html?mode=absents':'scan.html')).map(([h,l])=>'<a class="btn" href="'+h+'">'+l+'</a>').join('');
 $('menuBtn').onclick=()=>$('menu').classList.add('on');
 $('menuClose').onclick=()=>$('menu').classList.remove('on');
 
@@ -154,14 +170,16 @@ const devName=()=>safeKey(UI.dev)||'tablette';
 
 // ------------------------------------------------------------ participants
 let P=LS.get('cross.parts.'+store.key,{})||{};
-store.onValue('participants',v=>{ P=v||{}; LS.set('cross.parts.'+store.key,P); about(); });
+store.onValue('participants',v=>{ P=v||{}; LS.set('cross.parts.'+store.key,P); about(); countLabel(); });
 function about(){
   $('about').textContent='Version '+VERSION+' · '+(store.mode==='local'?'mode local':'synchronisé')+
     ' · '+Object.keys(P).length+' participants connus · clé '+store.key;
 }
 
 // Après une remise à zéro par l'organisateur, on oublie les passages antérieurs.
+let cfg=readCfg({});
 store.onValue('config',c=>{
+  cfg=readCfg(c);
   if(c&&c.resetAt){ const n=Q.list.length; Q.list=Q.list.filter(s=>s.t>=c.resetAt);
     if(Q.list.length!==n){ Q.save(); Q.notify(); countLabel(); } }
 });
@@ -180,12 +198,16 @@ function netPill(){
   el.classList.add(vieux||!connected?'off':'pend');
   txt.textContent=s.pending+' en attente';
 }
-function countLabel(){ const n=Q.stat().total; $('count').textContent=n+' passage'+(n>1?'s':''); }
+function countLabel(){
+  if(ABS){ const n=Object.values(P).filter(p=>p&&!p.a&&p.st).length;
+    $('count').textContent=n+' absent'+(n>1?'s':'')+' ou dispensé'+(n>1?'s':'')+' au total'; return; }
+  const n=Q.stat().total; $('count').textContent=n+' passage'+(n>1?'s':''); }
 
 // ------------------------------------------------------------ présence et appel
 // Champs écrits un par un : l'accusé de réception posé par l'admin n'est jamais écrasé.
 let calling=false, callAt=0;
 function heartbeat(){
+  if(ABS) return;                     // la tablette des absents n'apparaît pas parmi les tablettes de course
   const s=Q.stat(), b='devices/'+devName()+'/';
   store.update({[b+'t']:store.now(),[b+'n']:s.total,[b+'p']:s.pending,[b+'call']:calling,
     [b+'callAt']:callAt,[b+'dec']:DEC,[b+'v']:VERSION}).catch(()=>{});
@@ -251,7 +273,30 @@ function describe(d){
   if(estAdulteNum(d)) return 'Adulte';
   return '';
 }
+function flash(d,sub,cls,ms){
+  $('floodNum').textContent=d; $('floodSub').textContent=sub;
+  FLOOD.className='on'+(cls?' '+cls:''); beep(); setTimeout(()=>speak(d),190);
+  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.className='',ms||900);
+}
+const HK='cross.abs.'+store.key, hist=LS.get(HK,[])||[];
+function recordAbs(d){
+  const p=P[d];
+  if(!p||p.a){ flash(d,'Dossard inconnu : rien n\'est enregistré','warn',1600); return; }
+  const cid=courseDe(cfg,p), co=cid&&cfg.courses[cid];
+  if(co&&co.debut&&!co.fin){ flash(d,p.c+' · sa course est partie : rien n\'est enregistré','warn',2200); return; }
+  if(p.st){ flash(d,p.c+' · déjà noté '+(p.st==='absent'?'absent':'dispensé'),'same'); return; }
+  store.update({['participants/'+d+'/st']:'absent'});
+  hist.push(d); LS.set(HK,hist.slice(-300));
+  flash(d,p.c+' · noté absent');
+}
+$('undoBtn').onclick=()=>{
+  const d=hist.pop(); LS.set(HK,hist);
+  if(d==null){ flash('—','Rien à annuler','same'); return; }
+  if(P[d]&&P[d].st==='absent') store.update({['participants/'+d+'/st']:null});
+  flash(d,'annulé : l\'élève participe','same',1400);
+};
 function record(d,mode){
+  if(ABS) return recordAbs(d);
   Q.add({id:uid(),d,t:store.now(),v:devName(),m:mode});
   $('floodNum').textContent=d; $('floodSub').textContent=describe(d);
   FLOOD.classList.add('on'); beep(); setTimeout(()=>speak(d),190);

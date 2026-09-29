@@ -89,6 +89,8 @@
     </div>
     <div id="xOut" style="margin-top:12px"></div>
     <div id="pStats" class="muted small" style="margin-top:10px"></div>
+    <p class="small muted" style="margin-top:10px">Le matin, scannez les dossards récupérés des absents et dispensés avec la page <a href="scan.html?mode=absents">Absents</a> (tablette ou ordinateur avec caméra).</p>
+    <div id="absList" style="margin-top:8px"></div>
   </div>
 
   <!-- LIENS -------------------------------------------------------------->
@@ -312,7 +314,17 @@ function drawStats(){
   const cl=new Set(el.map(p=>p.c)), gr=new Set(el.filter(p=>p.g).map(p=>p.c+'|'+(p.ty||'')+'|'+p.g));
   const disp=el.filter(p=>p.st).length;
   $('pStats').textContent=el.length?`${el.length} élèves · ${cl.size} classes · ${gr.size} groupes · ${disp} dispensé(s) ou absent(s) · ${Object.keys(noms).length} noms connus sur cet ordinateur`:'Aucun participant importé.';
+  // liste des absents et dispensés, par classe (scannés le matin ou saisis à la main)
+  const parCl={};
+  for(const [d,p] of Object.entries(S.participants)) if(p&&!p.a&&p.st) (parCl[p.c]=parCl[p.c]||[]).push(+d);
+  const cls=Object.keys(parCl).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+  const wasOpen=!!($('absList').querySelector('details')||{}).open;
+  $('absList').innerHTML=cls.length?`<details><summary style="cursor:pointer;font-weight:600">Absents et dispensés <span class="tag o">${disp}</span></summary><table class="t">`+
+    cls.map(c=>`<tr><td><b>${esc(c)}</b> (${parCl[c].length})</td><td>${parCl[c].sort((a,b)=>a-b).map(d=>{ const n=noms[d], st=S.participants[d].st;
+      return `n° ${d}${n?' '+esc((n.prenom||'')+' '+(n.nom||'')):''}${st==='dispense'?' (dispensé)':''} <button class="btn small" data-st="" data-d="${d}" title="Remettre en participant">×</button>`; }).join(' · ')}</td></tr>`).join('')+'</table></details>':'';
+  if(wasOpen&&$('absList').querySelector('details')) $('absList').querySelector('details').open=true;
 }
+$('absList').onclick=e=>{ const b=e.target.closest('button[data-d]'); if(b) setStatut(+b.dataset.d,''); };
 $('xPick').onclick=()=>$('xFile').click();
 $('xFile').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;

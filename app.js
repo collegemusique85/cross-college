@@ -517,7 +517,7 @@ export async function boot(){
 }
 
 // ---------------------------------------------------------------- menu commun
-export const PAGES=[['index.html','Accueil'],['scan.html','Tablettes'],['direct.html','Direct'],
+export const PAGES=[['index.html','Accueil'],['scan.html','Tablettes'],['scan.html?mode=absents','Absents'],['direct.html','Direct'],
   ['resultats.html','Podiums'],['admin.html','Organisation'],['dossards.html','Dossards']];
 export function navBar(actif,dark){
   const n=document.createElement('nav'); n.className='topnav'+(dark?' dark':'');
