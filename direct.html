@@ -7,48 +7,88 @@
 <link rel="stylesheet" href="style.css">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
-  .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:100vh}
+  .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
+  .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;transition:opacity .6s}
+  body.idle .ctl{opacity:0;pointer-events:none}
+  .ctl select{background:#1A2026;color:#fff;border:1px solid #39424B;border-radius:8px;padding:8px 10px;font:inherit;font-size:15px}
+  .go{border:0;border-radius:10px;padding:11px 18px;font:inherit;font-size:16px;font-weight:800;cursor:pointer;background:var(--go);color:#062414}
+  .go.stop{background:#fff;color:var(--ink)}
+  .go.arm{background:var(--vest);color:var(--ink);animation:pulse .8s infinite alternate}
+  @keyframes pulse{to{box-shadow:0 0 0 8px #F2C23055}}
+  .ctl .hint{color:#9AA3AB;font-size:13px}
   header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
   .ttl .k{font-size:clamp(13px,1.1vw,17px);letter-spacing:.14em;text-transform:uppercase;color:var(--vest);font-weight:700}
   .ttl h1{font-size:clamp(28px,3.4vw,58px);line-height:1.05;letter-spacing:-.02em}
   .chrono{font-size:clamp(40px,6vw,104px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:.9}
   .chrono small{display:block;font-size:clamp(12px,1vw,16px);font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#9AA3AB;text-align:right;margin-top:6px}
-  .stats{display:flex;gap:clamp(18px,3vw,56px);border-top:1px solid #2B333B;border-bottom:1px solid #2B333B;padding:clamp(10px,1.4vh,18px) 0}
+  .stats{display:flex;gap:clamp(18px,3vw,56px);border-top:1px solid #2B333B;border-bottom:1px solid #2B333B;padding:clamp(10px,1.4vh,18px) 0;flex-wrap:wrap}
   .stat b{display:block;font-size:clamp(26px,3vw,50px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
   .stat span{font-size:clamp(12px,.95vw,15px);color:#9AA3AB;text-transform:uppercase;letter-spacing:.08em}
-  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:clamp(18px,2.6vw,48px);flex:1}
+
+  /* Défi des profs */
+  .defi{display:grid;grid-template-columns:auto 1fr;gap:clamp(16px,2.4vw,44px);align-items:center;
+    background:#161C21;border:1px solid #2B333B;border-left:6px solid var(--vest);border-radius:14px;padding:clamp(12px,1.6vh,20px) clamp(16px,1.8vw,30px)}
+  .defi .k{font-size:clamp(12px,.95vw,15px);letter-spacing:.14em;text-transform:uppercase;color:var(--vest);font-weight:700}
+  .defi .pv{font-size:clamp(34px,4vw,70px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1}
+  .defi .pv small{font-size:.32em;font-weight:600;color:#9AA3AB;letter-spacing:0;margin-left:6px}
+  .defi .ps{color:#9AA3AB;font-size:clamp(12px,.95vw,15px)}
+  .chase .who{font-size:clamp(18px,1.8vw,32px);font-weight:800;line-height:1.15}
+  .chase .who em{font-style:normal;color:var(--vest)}
+  .chase .who .ok{color:var(--go)}
+  .track{position:relative;height:clamp(14px,1.8vh,22px);background:#20272E;border-radius:99px;margin-top:10px;overflow:visible}
+  .track i{position:absolute;left:0;top:0;bottom:0;background:#E8ECEF;border-radius:99px;transition:width .9s ease}
+  .track i.win{background:var(--go)}
+  .track .goal{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--vest);border-radius:2px}
+  .track .goal::after{content:'profs';position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:700;color:var(--vest);letter-spacing:.08em;text-transform:uppercase}
+  .chase .gap{margin-top:8px;color:#9AA3AB;font-size:clamp(12px,1vw,16px)}
+
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:clamp(18px,2.6vw,48px);flex:1;align-content:start}
   .col h2{font-size:clamp(18px,1.7vw,28px);margin-bottom:clamp(8px,1vh,14px);display:flex;justify-content:space-between;align-items:baseline}
   .col h2 span{font-size:.6em;color:#9AA3AB;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
   .lane{display:grid;grid-template-columns:clamp(34px,2.6vw,48px) clamp(64px,5.4vw,96px) 1fr clamp(150px,12vw,220px);align-items:center;gap:12px;
     padding:clamp(5px,.8vh,10px) 0;border-bottom:1px dashed #2B333B}
   .rk{font-size:clamp(16px,1.4vw,24px);font-weight:800;color:#9AA3AB;font-variant-numeric:tabular-nums}
   .cl{font-size:clamp(20px,1.9vw,34px);font-weight:800;letter-spacing:-.01em}
-  .bar{height:clamp(14px,1.8vh,24px);background:#20272E;border-radius:99px;overflow:hidden}
+  .bar{position:relative;height:clamp(14px,1.8vh,24px);background:#20272E;border-radius:99px}
   .bar i{display:block;height:100%;background:#E8ECEF;border-radius:99px;transition:width .9s ease}
+  .bar .goal{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--vest);opacity:.8}
   .val{text-align:right;font-variant-numeric:tabular-nums}
   .val b{font-size:clamp(20px,1.9vw,34px);font-weight:800}
   .val small{display:block;font-size:clamp(11px,.85vw,14px);color:#9AA3AB}
   .lane.first .rk,.lane.first .cl{color:var(--vest)}
   .lane.first .bar i{background:var(--vest)}
+  .lane.beat .bar i{background:var(--go)}
+  .star{display:inline-block;white-space:nowrap;margin-right:6px;font-size:clamp(10px,.8vw,13px);vertical-align:middle;background:var(--go);color:#062414;border-radius:99px;padding:2px 8px;font-weight:800;letter-spacing:.04em}
+
+  /* Course à l'arrivée */
+  .arr{display:grid;grid-template-columns:clamp(40px,3vw,56px) 1fr auto;gap:12px;align-items:center;padding:clamp(5px,.8vh,10px) 0;border-bottom:1px dashed #2B333B}
+  .arr .nm{font-size:clamp(18px,1.7vw,30px);font-weight:800;line-height:1.1}
+  .arr .nm small{display:block;font-size:.55em;color:#9AA3AB;font-weight:500}
+  .arr .tp{font-size:clamp(20px,1.9vw,34px);font-weight:800;font-variant-numeric:tabular-nums}
+  .arr.p1 .rk,.arr.p1 .nm{color:var(--vest)}
+
   .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#9AA3AB;font-size:clamp(12px,1vw,16px)}
   #feed{white-space:nowrap;overflow:hidden;flex:1;font-variant-numeric:tabular-nums}
   #feed em{font-style:normal;color:#fff;font-weight:700;margin-right:14px}
   .ghost{background:none;border:1px solid #39424B;color:#9AA3AB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
   .empty{color:#9AA3AB;font-size:clamp(16px,1.3vw,22px);padding:20px 0}
   body.idle{cursor:none}
+  @media (max-width:700px){ .defi{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 <div class="scr">
+  <div class="ctl" id="ctl">
+    <label class="hint">Course affichée <select id="coSel"></select></label>
+    <button class="go" id="go" hidden>Donner le départ</button>
+    <span class="hint" id="goHint"></span>
+  </div>
   <header>
     <div class="ttl"><div class="k" id="kicker">En direct</div><h1 id="title">Cross du collège</h1></div>
     <div class="chrono"><span id="chrono">—</span><small id="chronoLbl">En attente du départ</small></div>
   </header>
-  <div class="stats">
-    <div class="stat"><b id="sTours">0</b><span>tours bouclés</span></div>
-    <div class="stat"><b id="sKm">0</b><span>kilomètres parcourus</span></div>
-    <div class="stat"><b id="sRun">0</b><span>coureurs en piste</span></div>
-  </div>
+  <div class="stats" id="stats"></div>
+  <div class="defi" id="defi" hidden></div>
   <div class="cols" id="cols"></div>
   <div class="foot">
     <div id="feed"></div>
@@ -57,12 +97,14 @@
   </div>
 </div>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,fmtChrono,fr1} from './app.js';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar} from './app.js';
 
+navBar('direct.html',true);
 const store=await boot();
 const S={participants:{},scans:{},corrections:{},config:{}};
-let tm=null;
+let tm=null, arme=null, armeT=null;
 const q=new URLSearchParams(location.search);
+const noms=getNoms(store.key);
 store.onValue('participants',v=>{S.participants=v; later();});
 store.onValue('corrections',v=>{S.corrections=v; later();});
 store.onValue('config',v=>{S.config=v; later();});
@@ -70,36 +112,132 @@ store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
 store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
 
 function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; draw(); },700); }
+const courseId=cfg=>{ const w=q.get('course'); return (w&&cfg.courses[w])?w:(cfg.courses[cfg.courant]?cfg.courant:Object.keys(cfg.courses)[0]); };
+const nomCourt=d=>{ const n=noms[d]; return n?((n.prenom||'')+' '+(n.nom||'')).trim():''; };
+const stat=(v,l,id)=>`<div class="stat"><b${id?' id="'+id+'"':''}>${v}</b><span>${l}</span></div>`;
 
 function draw(){
-  const res=compute(S), cfg=res.cfg;
-  const cid=q.get('course')||cfg.courant||'1', co=cfg.courses[cid]||{nom:'Course',niveaux:''};
+  const res=compute(S), cfg=res.cfg, cid=courseId(cfg), co=cfg.courses[cid]||{nom:'Course',niveaux:''};
   $('title').textContent=cfg.titre||'Cross du collège';
   $('kicker').textContent='En direct · '+(co.nom||'Course '+cid);
-  const cl=res.classes.filter(c=>c.course===cid);
-  const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
-  $('sTours').textContent=tours.toLocaleString('fr-FR');
-  $('sKm').textContent=fr1(tours*cfg.boucle);
-  $('sRun').textContent=run;
-  const max=Math.max(1,...cl.map(c=>c.moy));
-  const niv=niveauxDe(co);
-  $('cols').innerHTML=niv.map(n=>{
-    const L=cl.filter(c=>c.niv===n);
-    const rows=L.length?L.map((c,i)=>`<div class="lane${i===0&&c.moy>0?' first':''}">
-      <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}</div>
-      <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i></div>
-      <div class="val"><b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`).join('')
-      :'<div class="empty">Aucune classe de ce niveau.</div>';
-    return `<div class="col"><h2><b>${esc(n)}<sup>e</sup></b><span>moyenne de tours par élève</span></h2>${rows}</div>`;
-  }).join('')||'<div class="empty">Aucune course configurée.</div>';
-  // derniers tours réellement comptés (pas les relectures)
-  const feed=Object.values(S.scans).filter(s=>res.compte.has(s.id)).sort((a,b)=>b.t-a.t).slice(0,30)
-    .map(s=>{ const p=S.participants[s.d]; return p?(p.a?(p.cr||'Adulte'):p.c):null; }).filter(Boolean);
-  $('feed').innerHTML=feed.length?'Derniers tours : '+feed.map(x=>'<em>'+esc(x)+'</em>').join(''):'';
+  controls(cfg,cid,co);
+  if(estArrivee(co)) drawArrivee(res,cfg,cid,co); else drawTours(res,cfg,cid,co);
   tick();
 }
+
+// ---------- commandes : course affichée + départ / fin, sans passer par Organisation
+function controls(cfg,cid,co){
+  const sel=$('coSel'), ids=Object.keys(cfg.courses);
+  const h=ids.map(id=>`<option value="${esc(id)}"${id===cid?' selected':''}>${esc(cfg.courses[id].nom||'Course '+id)}${cfg.courses[id].debut&&!cfg.courses[id].fin?' · en cours':''}</option>`).join('');
+  if(sel.innerHTML!==h) sel.innerHTML=h;
+  const b=$('go');
+  if(arme===cid) return;               // bouton en attente de confirmation : on ne le redessine pas
+  b.hidden=!!co.fin; b.classList.remove('arm');
+  if(!co.debut){ b.textContent='Donner le départ'; b.className='go'; $('goHint').textContent=''; }
+  else if(!co.fin){ b.textContent='Terminer la course'; b.className='go stop'; $('goHint').textContent=''; }
+  else $('goHint').textContent='Course terminée — la rouvrir depuis Organisation si besoin.';
+}
+$('coSel').onchange=e=>{
+  const id=e.target.value;
+  if(q.get('course')){ q.set('course',id); history.replaceState(null,'','?'+q); draw(); }
+  else store.update({'config/courant':id});
+};
+$('go').onclick=()=>{
+  const cfg=readCfg(S.config), cid=courseId(cfg), co=cfg.courses[cid], b=$('go');
+  if(arme!==cid){                      // 1er appui : armer (évite un départ par erreur)
+    arme=cid; b.classList.add('arm');
+    b.textContent=co.debut?'Confirmer la fin ?':'Confirmer le départ ?';
+    $('goHint').textContent='Appuyez encore pour confirmer';
+    clearTimeout(armeT); armeT=setTimeout(()=>{ arme=null; draw(); },4000);
+    return;
+  }
+  clearTimeout(armeT); arme=null;
+  const P='config/courses/'+cid+'/';
+  if(!co.debut) store.update({[P+'debut']:store.now(),[P+'fin']:null,'config/courant':cid});
+  else if(!co.fin) store.update({[P+'fin']:store.now()});
+  draw();
+};
+
+// ---------- course aux tours (collège) : classes par niveau + défi des profs
+function drawTours(res,cfg,cid,co){
+  const cl=res.classes.filter(c=>c.course===cid);
+  const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
+  $('stats').innerHTML=stat(tours.toLocaleString('fr-FR'),'tours bouclés','sTours')+stat(fr1(tours*cfg.boucle),'kilomètres parcourus','sKm')+stat(run,'coureurs en piste','sRun');
+
+  const pr=res.profs[cid]||{n:0,moy:0,total:0}, pm=pr.n?pr.moy:0;
+  const max=Math.max(1,pm,...cl.map(c=>c.moy));
+  const goal=pm?`<span class="goal" style="left:${100*pm/max}%"></span>`:'';
+  let niv=niveauxPresents(cfg,cid,res.classes);
+  if(!niv.length) niv=niveauxDe(co).filter(n=>n!=='*');
+  $('cols').innerHTML=niv.map(n=>{
+    const L=cl.filter(c=>c.niv===n);
+    const rows=L.length?L.map((c,i)=>{ const bat=pm>0&&c.moy>pm;
+      return `<div class="lane${i===0&&c.moy>0?' first':''}${bat?' beat':''}">
+      <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}</div>
+      <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i>${goal}</div>
+      <div class="val">${bat?'<span class="star">★ bat les profs</span> ':''}<b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`; }).join('')
+      :'<div class="empty">Aucune classe de ce niveau.</div>';
+    return `<div class="col"><h2><b>${libNiveau(n)}</b><span>moyenne de tours par élève</span></h2>${rows}</div>`;
+  }).join('')||'<div class="empty">Aucune classe dans cette course : vérifiez les niveaux dans Organisation › Réglages.</div>';
+
+  drawDefi(cl,pr,co);
+  // derniers tours réellement comptés (pas les relectures)
+  const feed=Object.values(S.scans).filter(s=>res.compte.has(s.id)).sort((a,b)=>b.t-a.t).slice(0,30)
+    .map(s=>{ const p=S.participants[s.d]; return p?(p.a?(p.cr||'Prof'):p.c):null; }).filter(Boolean);
+  $('feed').innerHTML=feed.length?'Derniers tours : '+feed.map(x=>'<em>'+esc(x)+'</em>').join(''):'';
+}
+
+function drawDefi(cl,pr,co){
+  const el=$('defi');
+  if(!co.debut){ el.hidden=true; return; }
+  el.hidden=false;
+  const left=`<div><div class="k">Défi · qui battra les profs ?</div>
+    <div class="pv">${pr.n?fr1(pr.moy):'—'}<small>tours / prof</small></div>
+    <div class="ps">${pr.n?pr.n+' prof'+(pr.n>1?'s':'')+' en piste · '+pr.total+' tours':'Aucun prof n\'a encore bouclé de tour'}</div></div>`;
+  if(!pr.n){ el.innerHTML=left+'<div class="chase"><div class="who">Les profs ne sont pas encore passés sous l\'arche…</div></div>'; return; }
+  const act=cl.filter(c=>c.coureurs>0);
+  const bat=act.filter(c=>c.moy>pr.moy), egal=act.filter(c=>c.moy===pr.moy);
+  const suiv=act.filter(c=>c.moy<pr.moy).sort((a,b)=>b.moy-a.moy)[0];
+  let who, cible, win=false;
+  if(bat.length){
+    win=true; cible=bat[0];
+    who=`<span class="ok">${bat.length===1?'Record battu par la':bat.length+' classes battent les profs :'} ${bat.slice(0,6).map(c=>'<em>'+esc(c.c)+'</em>').join(', ')}${bat.length>6?'…':''}</span>`;
+  } else if(egal.length){
+    cible=egal[0]; who=`<em>${esc(egal[0].c)}</em> est à égalité avec les profs !`;
+  } else if(suiv){
+    cible=suiv; who=`La plus proche : <em>${esc(suiv.c)}</em>`;
+  } else { el.innerHTML=left+'<div class="chase"><div class="who">Aucune classe n\'a encore de tour.</div></div>'; return; }
+  const max=Math.max(pr.moy,cible.moy)*1.08||1;
+  const ecart=pr.moy-cible.moy;
+  const gap=win?(suiv?`Prochaine menace : <b>${esc(suiv.c)}</b> à ${fr1(pr.moy-suiv.moy)} ${pr.moy-suiv.moy>=2?'tours':'tour'} des profs`:'Toutes les classes en piste ont battu les profs !')
+    :ecart>0?`Il manque <b>${fr1(ecart)}</b> ${ecart>=2?'tours':'tour'} de moyenne à ${esc(cible.c)} (${fr1(cible.moy)}) — soit environ ${Math.max(1,Math.ceil(ecart*cible.coureurs))} tour${Math.ceil(ecart*cible.coureurs)>1?'s':''} de plus pour la classe.`:'';
+  el.innerHTML=left+`<div class="chase"><div class="who">${who}</div>
+    <div class="track"><i class="${win?'win':''}" style="width:${100*cible.moy/max}%"></i><span class="goal" style="left:${100*pr.moy/max}%"></span></div>
+    <div class="gap">${gap}</div></div>`;
+}
+
+// ---------- course au classement d'arrivée (lycée) : du premier au dernier scanné
+function drawArrivee(res,cfg,cid,co){
+  $('defi').hidden=true;
+  const A=res.arrivees[cid]||{inscrits:0,arrives:[]}, L=A.arrives;
+  const best=L.length&&L[0].temps!=null?fmtChrono(L[0].temps):'—';
+  $('stats').innerHTML=stat(L.length,'arrivés','sArr')+stat(Math.max(0,A.inscrits-L.length),'encore en course','sRest')+stat(best,'meilleur temps');
+  const ligne=(x,rk)=>{ const nm=nomCourt(x.d);
+    return `<div class="arr${rk===1?' p1':''}"><div class="rk">${rk}</div>
+      <div class="nm">${nm?esc(nm):'Dossard '+x.d}<small>${esc(x.p.c)}${nm?' · n° '+x.d:''}</small></div>
+      <div class="tp">${x.temps!=null?fmtChrono(x.temps):'—'}</div></div>`; };
+  const bloc=(titre,T,rk)=>`<div class="col"><h2><b>${titre}</b><span>${T.length} arrivé${T.length>1?'s':''}</span></h2>${
+    T.length?T.slice(0,10).map(x=>ligne(x,rk(x))).join(''):'<div class="empty">Personne pour l\'instant.</div>'}</div>`;
+  const F=L.filter(x=>x.p.s==='F'), G=L.filter(x=>x.p.s==='G'), sansSexe=L.filter(x=>x.p.s!=='F'&&x.p.s!=='G');
+  let h=(co.sexe!=='G'?bloc('Filles',F,x=>x.rangSexe):'')+(co.sexe!=='F'?bloc('Garçons',G,x=>x.rangSexe):'');
+  if(sansSexe.length||(!F.length&&!G.length&&L.length)) h+=bloc('Scratch',L,x=>x.rang);
+  $('cols').innerHTML=co.debut||L.length?h:'<div class="empty">Course au classement d\'arrivée : le premier dossard scanné après le départ est premier, et ainsi de suite.</div>';
+  const last=L.slice(-12).reverse();
+  $('feed').innerHTML=last.length?'Dernières arrivées : '+last.map(x=>'<em>'+x.rang+'. '+esc(nomCourt(x.d)||'n° '+x.d)+'</em>').join(''):'';
+}
+
 function tick(){
-  const cfg=readCfg(S.config), cid=q.get('course')||cfg.courant||'1', co=cfg.courses[cid]||{};
+  const cfg=readCfg(S.config), co=cfg.courses[courseId(cfg)]||{};
   if(!co.debut){ $('chrono').textContent='—'; $('chronoLbl').textContent='En attente du départ'; return; }
   const fin=co.fin||store.now();
   $('chrono').textContent=fmtChrono(fin-co.debut);
@@ -109,7 +247,8 @@ setInterval(tick,1000);
 draw();
 
 $('fs').onclick=()=>{ const d=document.documentElement; (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); };
-let idle; addEventListener('mousemove',()=>{ document.body.classList.remove('idle'); clearTimeout(idle); idle=setTimeout(()=>document.body.classList.add('idle'),3000); });
+let idle; const wake=()=>{ document.body.classList.remove('idle'); clearTimeout(idle); idle=setTimeout(()=>document.body.classList.add('idle'),4000); };
+['mousemove','touchstart','keydown'].forEach(e=>addEventListener(e,wake,{passive:true})); wake();
 </script>
 </body>
 </html>

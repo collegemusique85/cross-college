@@ -43,13 +43,15 @@
   .foot{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;color:#9AA3AB;font-size:13px}
   .ghost{background:none;border:1px solid #39424B;color:#C9CED3;border-radius:8px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
   .hint{color:#9AA3AB;font-size:13px}
+  table.rk tr.profs td{color:var(--vest);font-style:italic}
+  .beat{display:inline-block;margin-left:6px;font-size:.75em;background:var(--go);color:#062414;border-radius:99px;padding:1px 7px;font-weight:800;font-style:normal}
 </style>
 </head>
 <body>
 <div class="scr">
   <header>
     <div><div class="k" id="kicker">Résultats</div><h1 id="title">Podiums des groupes</h1></div>
-    <div class="nav" id="nivs"></div>
+    <div class="nav" id="secs"></div>
   </header>
   <div class="nav" id="cats"></div>
 
@@ -78,8 +80,9 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,niveauxDe,fr1,TYPES,getNoms,setNoms,nomDe,parseWorkbook,exportWorkbook,LS} from './app.js';
+import {$,esc,boot,compute,niveauxDe,niveauxPresents,libNiveau,estArrivee,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,parseWorkbook,exportWorkbook,LS,navBar} from './app.js';
 
+navBar('resultats.html',true);
 const store=await boot();
 const S={participants:{},scans:{},corrections:{},config:{}};
 let noms=getNoms(store.key), res=null, tm=null;
@@ -89,58 +92,87 @@ store.onValue('config',v=>{S.config=v; later();});
 store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
 store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
 
-const CATS=[['F','Filles'],['G','Garçons'],['M','Mixtes'],['C','Classes']];
+// Catégories : courses aux tours (groupes + classes) et courses à l'arrivée (individuel)
+const CATS_T=[['F','Filles'],['G','Garçons'],['M','Mixtes'],['C','Classes']];
+const CATS_A=[['F','Filles'],['G','Garçons'],['S','Général']];
 const RK='cross.podium.'+store.key;
-let st=Object.assign({open:false,niv:null,cat:'F',step:0,all:false},LS.get(RK,{}));
+let st=Object.assign({open:false,sec:null,cat:'F',step:0,all:false},LS.get(RK,{}));
 const save=()=>LS.set(RK,st);
 function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; res=compute(S); draw(); },600); }
 
-function niveaux(){
-  const out=[]; for(const id in res.cfg.courses) for(const n of niveauxDe(res.cfg.courses[id])) if(!out.includes(n)) out.push(n);
+// Une « section » = un niveau d'une course aux tours, ou une course à l'arrivée.
+function sections(){
+  const out=[], cfg=res.cfg, ids=Object.keys(cfg.courses), plus=ids.length>1;
+  for(const id of ids){ const co=cfg.courses[id];
+    if(estArrivee(co)){ out.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Course '+id)}); continue; }
+    let N=niveauxPresents(cfg,id,res.classes); if(!N.length) N=niveauxDe(co).filter(n=>n!=='*');
+    for(const n of N) out.push({k:'n:'+id+':'+n,id,niv:n,lab:libNiveau(n)});
+  }
   return out;
 }
-function liste(){
-  if(st.cat==='C') return res.classes.filter(c=>c.niv===st.niv&&c.total>0)
-    .map(c=>({lab:c.c,moy:c.moy,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),det:c.coureurs+' / '+c.inscrits+' élèves'}));
-  return res.groupes.filter(g=>g.niv===st.niv&&g.ty===st.cat&&g.moy>0).map(g=>({
+const catsDe=sec=>!sec||!sec.arr?CATS_T:(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A);
+function liste(sec){
+  if(sec.arr){
+    const A=(res.arrivees[sec.id]||{arrives:[]}).arrives;
+    const L=st.cat==='S'?A:A.filter(x=>x.p.s===st.cat);
+    return L.map(x=>({lab:nomDe(noms,x)||'Dossard '+x.d, rang:st.cat==='S'?x.rang:x.rangSexe,
+      val:x.temps!=null?fmtChrono(x.temps):'—', sub:x.p.c+' · n° '+x.d, det:x.p.c}));
+  }
+  const pm=(res.profs[sec.id]||{}).n?res.profs[sec.id].moy:0;
+  if(st.cat==='C') return res.classes.filter(c=>c.course===sec.id&&c.niv===sec.niv&&c.total>0)
+    .map(c=>({lab:c.c,moy:c.moy,beat:pm>0&&c.moy>pm,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),det:c.coureurs+' / '+c.inscrits+' élèves'}));
+  return res.groupes.filter(g=>g.course===sec.id&&g.niv===sec.niv&&g.ty===st.cat&&g.moy>0).map(g=>({
     lab:g.c+' · '+g.g, moy:g.moy,
     sub:g.membres.filter(m=>!m.p.st).map(m=>(nomDe(noms,m)||('n° '+m.d))+' ('+m.tours+')').join(', '),
     det:g.coureurs+' / '+g.membres.length}));
 }
-function rangs(L){ let r=0,prev=null; return L.map((x,i)=>{ const v=Math.round(x.moy*100); if(v!==prev){ r=i+1; prev=v; } return r; }); }
+function rangs(L){ if(L.length&&L[0].rang!=null) return L.map(x=>x.rang);
+  let r=0,prev=null; return L.map((x,i)=>{ const v=Math.round(x.moy*100); if(v!==prev){ r=i+1; prev=v; } return r; }); }
 
 function draw(){
   if(!res) return;
-  const N=niveaux(); if(!st.niv||!N.includes(st.niv)) st.niv=N[0]||'6';
+  const SE=sections(); let sec=SE.find(x=>x.k===st.sec); if(!sec){ sec=SE[0]; st.sec=sec&&sec.k; }
+  const CATS=catsDe(sec); if(!CATS.some(c=>c[0]===st.cat)) st.cat=CATS[0][0];
   $('title').textContent=res.cfg.titre||'Cross du collège';
-  $('kicker').textContent='Podiums des groupes';
-  $('nivs').innerHTML=N.map(n=>`<button class="chip${n===st.niv?' on':''}" data-n="${n}">${n}<sup>e</sup></button>`).join('');
+  $('kicker').textContent=sec&&sec.arr?'Classement à l\'arrivée':'Podiums des groupes';
+  $('secs').innerHTML=SE.map(x=>`<button class="chip${x.k===st.sec?' on':''}" data-s="${esc(x.k)}">${x.lab}</button>`).join('');
   $('cats').innerHTML=CATS.map(([k,l])=>`<button class="chip${k===st.cat?' on':''}" data-c="${k}">${l}</button>`).join('');
   $('lock').hidden=st.open; $('stage').hidden=!st.open;
-  if(!st.open) return;
-  const L=liste(), R=rangs(L);
-  $('catTitle').innerHTML=esc(st.niv)+'<sup>e</sup> · '+(st.cat==='C'?'Classes':'Groupes '+esc(TYPES[st.cat].toLowerCase()))+
-    ' <span>— moyenne de tours par '+(st.cat==='C'?'élève':'membre')+'</span>';
+  if(!st.open||!sec) return;
+  const L=liste(sec), R=rangs(L), catLab=CATS.find(c=>c[0]===st.cat)[1];
+  $('catTitle').innerHTML=sec.arr
+    ? sec.lab+' · '+esc(catLab)+' <span>— ordre d\'arrivée</span>'
+    : sec.lab+' · '+(st.cat==='C'?'Classes':'Groupes '+esc(TYPES[st.cat].toLowerCase()))+' <span>— moyenne de tours par '+(st.cat==='C'?'élève':'membre')+'</span>';
+  const score=x=>x.val!=null?x.val:fr1(x.moy)+' tours';
   const slot=(i,cls)=>{ const x=L[i]; if(!x) return `<div class="step ${cls}"></div>`;
     const vis=st.all||st.step>=3-i;
-    return `<div class="step ${cls}${vis?' show':''}"><div class="who"><div class="g">${esc(x.lab)}</div><div class="m">${esc(x.sub)}</div></div>
-      <div class="block"><div class="pl">${R[i]}</div><div class="sc">${fr1(x.moy)} tours</div></div></div>`; };
+    return `<div class="step ${cls}${vis?' show':''}"><div class="who"><div class="g">${esc(x.lab)}</div><div class="m">${esc(x.sub)}${x.beat?' <span class="beat">a battu les profs</span>':''}</div></div>
+      <div class="block"><div class="pl">${R[i]}</div><div class="sc">${esc(score(x))}</div></div></div>`; };
   $('podium').innerHTML=L.length?slot(1,'p2')+slot(0,'p1')+slot(2,'p3'):'<div class="hint">Aucun résultat dans cette catégorie.</div>';
   const done=st.all||st.step>=3;
   $('next').textContent=done?'Catégorie suivante →':'Suivant →';
   $('table').hidden=!done;
-  $('table').innerHTML='<tr><th>Rang</th><th>'+(st.cat==='C'?'Classe':'Groupe')+'</th><th>Moyenne</th><th>'+(st.cat==='C'?'Élèves ayant couru':'Membres ayant couru')+'</th><th>'+(st.cat==='C'?'Détail':'Tours de chacun')+'</th></tr>'+
-    L.map((x,i)=>`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b></td><td class="n">${fr1(x.moy)}</td><td>${esc(x.det)}</td><td>${esc(x.sub)}</td></tr>`).join('');
+  if(sec.arr){
+    $('table').innerHTML='<tr><th>Rang</th><th>Coureur</th><th>Temps</th><th>Classe</th></tr>'+
+      L.map((x,i)=>`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b></td><td class="n">${esc(x.val)}</td><td>${esc(x.sub)}</td></tr>`).join('');
+  } else {
+    let rows=L.map((x,i)=>({m:x.moy,h:`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b>${x.beat?'<span class="beat">bat les profs</span>':''}</td><td class="n">${fr1(x.moy)}</td><td>${esc(x.det)}</td><td>${esc(x.sub)}</td></tr>`}));
+    const pr=res.profs[sec.id];
+    if(st.cat==='C'&&pr&&pr.n){ // ligne « défi » hors classement, placée à sa hauteur
+      const h=`<tr class="profs"><td class="n">défi</td><td><b>Les profs</b></td><td class="n">${fr1(pr.moy)}</td><td>${pr.n} adulte${pr.n>1?'s':''}</td><td>${pr.total} tours — hors classement</td></tr>`;
+      const at=rows.findIndex(r=>r.m<pr.moy); rows.splice(at<0?rows.length:at,0,{h}); }
+    $('table').innerHTML='<tr><th>Rang</th><th>'+(st.cat==='C'?'Classe':'Groupe')+'</th><th>Moyenne</th><th>'+(st.cat==='C'?'Élèves ayant couru':'Membres ayant couru')+'</th><th>'+(st.cat==='C'?'Détail':'Tours de chacun')+'</th></tr>'+rows.map(r=>r.h).join('');
+  }
   save();
 }
 function suite(){
-  const N=niveaux(), ci=CATS.findIndex(c=>c[0]===st.cat), ni=N.indexOf(st.niv);
+  const SE=sections(), si=SE.findIndex(x=>x.k===st.sec), CATS=catsDe(SE[si]), ci=CATS.findIndex(c=>c[0]===st.cat);
   if(!st.all&&st.step<3){ st.step++; draw(); return; }
-  if(ci<CATS.length-1) st.cat=CATS[ci+1][0]; else if(ni<N.length-1){ st.niv=N[ni+1]; st.cat=CATS[0][0]; }
+  if(ci<CATS.length-1) st.cat=CATS[ci+1][0]; else if(si<SE.length-1){ st.sec=SE[si+1].k; st.cat=catsDe(SE[si+1])[0][0]; }
   st.step=0; st.all=false; draw();
 }
 function retour(){ if(st.step>0&&!st.all){ st.step--; draw(); } }
-$('nivs').onclick=e=>{ const b=e.target.closest('[data-n]'); if(b){ st.niv=b.dataset.n; st.step=0; st.all=false; draw(); } };
+$('secs').onclick=e=>{ const b=e.target.closest('[data-s]'); if(b){ st.sec=b.dataset.s; st.step=0; st.all=false; draw(); } };
 $('cats').onclick=e=>{ const b=e.target.closest('[data-c]'); if(b){ st.cat=b.dataset.c; st.step=0; st.all=false; draw(); } };
 $('unlock').onclick=()=>{ st.open=true; st.step=0; draw(); };
 $('relock').onclick=()=>{ st.open=false; st.step=0; st.all=false; draw(); };

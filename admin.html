@@ -16,10 +16,12 @@
   .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
   .links .card{margin:0}
   .links code{font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--muted)}
-  #callBanner{position:sticky;top:0;z-index:5;background:var(--bad);color:#fff;padding:12px 16px;font-weight:700;display:none;text-align:center}
+  #callBanner{position:sticky;top:46px;z-index:5;background:var(--bad);color:#fff;padding:12px 16px;font-weight:700;display:none;text-align:center}
   .num{font-variant-numeric:tabular-nums}
   .scroll{max-height:360px;overflow:auto}
   .inline{display:inline-flex;gap:6px;align-items:center}
+  .cc select,.cc input{width:100%}
+  .cc label{display:block;margin-top:8px}
 </style>
 </head>
 <body>
@@ -107,8 +109,15 @@
       <label>Ignorer les passages juste après le départ (s) <input id="cDelai" inputmode="numeric"></label>
     </div>
     <p class="small muted" style="margin-top:10px">L'absence doit rester nettement plus courte que le tour le plus rapide (60 s pour une boucle de 800 m). Le délai après le départ ne sert que si les tablettes sont placées sur la ligne de départ : sinon laissez 0.</p>
+    <h3 style="margin-top:18px;font-size:16px">Courses</h3>
+    <p class="small muted">« Tours » : chaque passage sous l'arche compte un tour (collège). « Classement à l'arrivée » : le premier dossard scanné après le départ est premier, puis le suivant… (lycée), avec le temps de chacun. Niveaux : début du nom de classe, séparés par des virgules (<code>6,5</code> · <code>2,1,T</code>) ou <code>*</code> pour toutes les classes.</p>
     <div class="grid2" id="cCourses" style="margin-top:12px"></div>
-    <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button></div>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button><button class="btn" id="cAdd">+ Ajouter une course</button></div>
+    <div class="row" style="margin-top:10px;align-items:center"><span class="small muted">Préréglages :</span>
+      <button class="btn small" data-preset="college">Collège (6<sup>e</sup>-5<sup>e</sup> puis 4<sup>e</sup>-3<sup>e</sup>, aux tours)</button>
+      <button class="btn small" data-preset="lycee1">Lycée : une course, classement à l'arrivée</button>
+      <button class="btn small" data-preset="lycee2">Lycée : filles puis garçons, à l'arrivée</button></div>
+    <p class="small muted" style="margin-top:10px">Conseil : pour le lycée, utilisez <b>une autre clé d'événement</b> que celle du collège (page d'accueil › Changer de clé). Les numéros de dossard, les participants et les résultats restent ainsi séparés ; pensez à autoriser cette deuxième clé dans les règles Firebase.</p>
   </details>
 
   <!-- SECOURS ------------------------------------------------------------>
@@ -131,8 +140,9 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar} from './app.js';
 
+navBar('admin.html');
 const store=await boot();
 const S={participants:{},scans:{},corrections:{},config:{},devices:{}};
 const now=()=>store.now();
@@ -154,15 +164,19 @@ function drawCourses(){
   $('courses').innerHTML=Object.entries(cfg.courses).map(([id,c])=>{
     const cl=res.classes.filter(x=>x.course===id);
     const tours=cl.reduce((a,x)=>a+x.total,0), run=cl.reduce((a,x)=>a+x.coureurs+x.adultes,0);
+    const AR=res.arrivees[id];
+    const bilan=AR?`${AR.arrives.length} arrivé${AR.arrives.length>1?'s':''} sur ${AR.inscrits} inscrits${AR.arrives[0]&&AR.arrives[0].temps!=null?' · meilleur temps '+fmtChrono(AR.arrives[0].temps):''}`
+      :`${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km`;
+    const quoi=(c.niveaux==='*'||c.niveaux.split(',').includes('*')?'toutes les classes':'niveaux '+esc(c.niveaux))+(c.sexe==='F'?' · filles':c.sexe==='G'?' · garçons':'')+(AR?' · à l\'arrivée':' · aux tours');
     const etat=!c.debut?'<span class="tag">pas partie</span>':(c.fin?'<span class="tag">terminée</span>':'<span class="tag g">en cours</span>');
     const chrono=c.debut?`<div class="chrono" data-chrono="${id}">${fmtChrono((c.fin||now())-c.debut)}</div>`:'';
     const btns=!c.debut?`<button class="btn vest" data-go="${id}">Donner le départ</button>`
       :(!c.fin?`<button class="btn primary" data-end="${id}">Fin de la course</button>`
       :`<button class="btn small" data-reopen="${id}">Rouvrir</button>`)
       +(c.debut?` <button class="btn small danger" data-undo="${id}">Annuler le départ</button>`:'');
-    return `<div class="course"><div><h3>${esc(c.nom)} <span class="muted small">niveaux ${esc(c.niveaux)}</span> ${etat}
+    return `<div class="course"><div><h3>${esc(c.nom)} <span class="muted small">${quoi}</span> ${etat}
       ${cfg.courant===id?'<span class="tag o">affichée en direct</span>':` <button class="btn small" data-show="${id}">Afficher en direct</button>`}</h3>
-      <div class="muted small">${c.debut?'Départ '+fmtHeure(c.debut)+(c.fin?' · fin '+fmtHeure(c.fin):''):'—'} · ${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km</div></div>
+      <div class="muted small">${c.debut?'Départ '+fmtHeure(c.debut)+(c.fin?' · fin '+fmtHeure(c.fin):''):'—'} · ${bilan}</div></div>
       <div style="text-align:right">${chrono}<div class="row" style="justify-content:flex-end;margin-top:6px">${btns}</div></div></div>`;
   }).join('');
 }
@@ -221,7 +235,7 @@ function drawControl(){
   if(A.dispenses.length) blocs.push('<h3 style="margin:14px 0 6px">Dispensés ou absents qui ont été scannés <span class="tag o">'+A.dispenses.length+'</span></h3><table class="t">'+
     A.dispenses.map(L=>`<tr><td>${ligne(L)}</td><td>${L.laps.length} passage(s) — noté « ${L.p.st==='dispense'?'dispensé':esc(L.p.st)} »</td><td><button class="btn small" data-st="" data-d="${L.d}">Il a couru : réintégrer</button></td></tr>`).join('')+'</table>');
   const fin=Object.values(cfg.courses).some(c=>c.fin);
-  if(A.zero.length) blocs.push('<details><summary style="cursor:pointer;margin:14px 0 6px;font-weight:600">Élèves sans aucun tour dans une course partie <span class="tag">'+A.zero.length+'</span></summary>'+
+  if(A.zero.length) blocs.push('<details><summary style="cursor:pointer;margin:14px 0 6px;font-weight:600">Élèves sans aucun passage dans une course partie <span class="tag">'+A.zero.length+'</span></summary>'+
     '<p class="small muted">'+(fin?'Indiquez « absent » pour ceux qui n\'ont pas couru : ils ne pèseront pas dans les moyennes (ils n\'y pèsent pas non plus sans rien faire, mais la liste s\'en trouve nettoyée).':'Normal en début de course.')+'</p><div class="scroll"><table class="t">'+
     A.zero.sort((a,b)=>a.p.c.localeCompare(b.p.c)||a.d-b.d).map(L=>`<tr><td>${ligne(L)}</td><td><button class="btn small" data-st="absent" data-d="${L.d}">Absent</button> <button class="btn small" data-st="dispense" data-d="${L.d}">Dispensé</button></td></tr>`).join('')+'</table></div></details>');
   const corr=Object.entries(S.corrections||{}).filter(([k,c])=>c&&c.delta).sort((a,b)=>b[1].t-a[1].t);
@@ -359,20 +373,50 @@ drawLinks();
 
 // ================================================================= réglages
 function fillCfg(){
-  if(cfgFilled&&document.activeElement&&document.activeElement.closest('details')) return;
+  const ae=document.activeElement;
+  if(cfgFilled&&ae&&ae.matches('input,select,textarea')&&ae.closest('details')) return;
   const c=readCfg(S.config);
   $('cTitre').value=c.titre; $('cBoucle').value=String(c.boucle).replace('.',','); $('cAbs').value=c.absence; $('cPlaf').value=c.plafond; $('cDelai').value=c.delai;
-  $('cCourses').innerHTML=Object.entries(c.courses).map(([id,x])=>`<div class="card" style="margin:0"><b>Course ${id}</b>
-    <label style="display:block;margin-top:8px">Nom <input data-cn="${id}" value="${esc(x.nom)}" style="width:100%"></label>
-    <label style="display:block;margin-top:8px">Niveaux (ex. 6,5) <input data-cv="${id}" value="${esc(x.niveaux)}" style="width:100%"></label></div>`).join('');
+  $('cCourses').innerHTML=Object.entries(c.courses).map(([id,x])=>`<div class="card cc" style="margin:0">
+    <div class="row" style="justify-content:space-between"><b>Course ${esc(id)}</b><button class="btn small danger" data-cdel="${esc(id)}">Supprimer</button></div>
+    <label>Nom <input data-cn="${esc(id)}" value="${esc(x.nom)}"></label>
+    <label>Niveaux (6,5 · 2,1,T · * = toutes) <input data-cv="${esc(id)}" value="${esc(x.niveaux)}"></label>
+    <label>Type <select data-ct="${esc(id)}"><option value="tours"${x.type!=='arrivee'?' selected':''}>Tours comptés (collège)</option><option value="arrivee"${x.type==='arrivee'?' selected':''}>Classement à l'arrivée (lycée)</option></select></label>
+    <label${x.type==='arrivee'?'':' hidden'} data-cxw="${esc(id)}">Participants <select data-cx="${esc(id)}"><option value="">Filles et garçons</option><option value="F"${x.sexe==='F'?' selected':''}>Filles seulement</option><option value="G"${x.sexe==='G'?' selected':''}>Garçons seulement</option></select></label>
+  </div>`).join('');
   cfgFilled=true;
 }
+$('cCourses').onchange=e=>{ const t=e.target.closest('[data-ct]'); if(t) document.querySelector('[data-cxw="'+t.dataset.ct+'"]').hidden=t.value!=='arrivee'; };
+$('cCourses').onclick=e=>{ const b=e.target.closest('[data-cdel]'); if(!b) return; const id=b.dataset.cdel, co=readCfg(S.config).courses[id];
+  if(Object.keys(readCfg(S.config).courses).length<2){ alert('Il faut garder au moins une course.'); return; }
+  if(!confirm('Supprimer « '+co.nom+' » ?'+(co.debut?' Elle a déjà un départ : ses résultats disparaîtront des classements.':''))) return;
+  store.update({['config/courses/'+id]:{off:true},...(S.config.courant===id?{'config/courant':null}:{})}).then(()=>{ cfgFilled=false; fillCfg(); }); };
+$('cAdd').onclick=()=>{ const ids=Object.keys({...readCfg({}).courses,...(S.config.courses||{})}).map(Number).filter(n=>n>0);
+  const id=String(Math.max(0,...ids)+1);
+  store.update({['config/courses/'+id]:{nom:'Course '+id,niveaux:'',type:'tours'}}).then(()=>{ cfgFilled=false; fillCfg(); }); };
+const PRESETS={
+  college:{titre:'Cross du collège',courses:{'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours'},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours'}}},
+  lycee1:{titre:'Cross du lycée',courses:{'1':{nom:'Cross du lycée',niveaux:'*',type:'arrivee'}}},
+  lycee2:{titre:'Cross du lycée',courses:{'1':{nom:'Course des filles',niveaux:'*',type:'arrivee',sexe:'F'},'2':{nom:'Course des garçons',niveaux:'*',type:'arrivee',sexe:'G'}}}
+};
+document.querySelector('details.card').addEventListener('click',e=>{ const b=e.target.closest('[data-preset]'); if(!b) return;
+  const cur=readCfg(S.config);
+  if(Object.values(cur.courses).some(c=>c.debut)&&!confirm('Une course a déjà un départ. Remplacer quand même les courses ? Les heures de départ seront effacées ; les passages scannés sont conservés.')) return;
+  if(!confirm('Remplacer le titre et les courses par le préréglage « '+b.textContent+' » ?')) return;
+  const P=PRESETS[b.dataset.preset], u={'config/titre':P.titre,'config/courant':'1'};
+  const ids=new Set([...Object.keys(readCfg({}).courses),...Object.keys(S.config.courses||{})]);
+  for(const id of ids) u['config/courses/'+id]=P.courses[id]?{...P.courses[id]}:{off:true};
+  for(const id in P.courses) u['config/courses/'+id]={...P.courses[id]};
+  store.update(u).then(()=>{ cfgFilled=false; fillCfg(); });
+});
 $('cSave').onclick=()=>{
   const num=v=>parseFloat(String(v).replace(',','.'));
   const u={'config/titre':$('cTitre').value.trim()||'Cross du collège','config/boucle':num($('cBoucle').value)||0.8,
     'config/absence':Math.max(10,parseInt($('cAbs').value,10)||60),'config/plafond':parseInt($('cPlaf').value,10)||15,'config/delai':Math.max(0,parseInt($('cDelai').value,10)||0)};
   document.querySelectorAll('[data-cn]').forEach(i=>u['config/courses/'+i.dataset.cn+'/nom']=i.value.trim()||'Course '+i.dataset.cn);
-  document.querySelectorAll('[data-cv]').forEach(i=>u['config/courses/'+i.dataset.cv+'/niveaux']=i.value.replace(/\s+/g,''));
+  document.querySelectorAll('[data-cv]').forEach(i=>u['config/courses/'+i.dataset.cv+'/niveaux']=i.value.replace(/\s+/g,'').toUpperCase());
+  document.querySelectorAll('[data-ct]').forEach(i=>u['config/courses/'+i.dataset.ct+'/type']=i.value);
+  document.querySelectorAll('[data-cx]').forEach(i=>u['config/courses/'+i.dataset.cx+'/sexe']=(i.closest('.cc').querySelector('[data-ct]').value==='arrivee'&&i.value)||null);
   store.update(u).then(()=>{ $('cSave').textContent='Enregistré ✓'; setTimeout(()=>$('cSave').textContent='Enregistrer les réglages',1500); });
 };
 

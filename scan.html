@@ -71,7 +71,10 @@
 
   <div id="topbar">
     <div><div id="devlabel">—</div><div id="count">0 passage</div></div>
-    <span class="pill" id="net"><i></i><span>connexion…</span></span>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span class="pill" id="net"><i></i><span>connexion…</span></span>
+      <button class="bb" id="menuBtn" aria-label="Menu" style="font-size:17px;padding:10px 14px">☰ Menu</button>
+    </div>
   </div>
   <div id="bottombar">
     <button class="bb" id="kbBtn">⌨︎  Taper un numéro</button>
@@ -95,6 +98,14 @@
     <div id="kbInfo"></div>
     <div id="kbKeys"></div>
     <button class="btn" id="kbClose">Annuler</button>
+  </div></div>
+
+  <!-- menu : les autres pages. Quitter cette page arrête la caméra. -->
+  <div class="sheet" id="menu"><div class="in">
+    <h2>Aller à une autre page</h2>
+    <p id="menuWarn">Tes passages sont gardés sur la tablette : rien n'est perdu si tu quittes cette page. Pense à revenir ici pour continuer à scanner.</p>
+    <div id="menuLinks" style="display:flex;flex-direction:column;gap:10px"></div>
+    <button class="btn primary" id="menuClose">Rester sur le scan</button>
   </div></div>
 
   <!-- réglages -->
@@ -121,7 +132,10 @@
 <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script type="module">
-import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure} from './app.js';
+import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES} from './app.js';
+$('menuLinks').innerHTML=PAGES.filter(([h])=>h!=='scan.html').map(([h,l])=>'<a class="btn" href="'+h+'">'+l+'</a>').join('');
+$('menuBtn').onclick=()=>$('menu').classList.add('on');
+$('menuClose').onclick=()=>$('menu').classList.remove('on');
 
 const store=await boot();
 const Q=new ScanQueue(store);

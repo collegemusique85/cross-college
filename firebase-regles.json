@@ -4,8 +4,8 @@
     ".write": false,
     "events": {
       "$cle": {
-        ".read": "$cle === 'REMPLACEZ-PAR-VOTRE-CLE'",
-        ".write": "$cle === 'REMPLACEZ-PAR-VOTRE-CLE'"
+        ".read": "$cle === 'CLE-DU-COLLEGE' || $cle === 'CLE-DU-LYCEE'",
+        ".write": "$cle === 'CLE-DU-COLLEGE' || $cle === 'CLE-DU-LYCEE'"
       }
     }
   }

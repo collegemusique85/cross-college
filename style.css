@@ -69,3 +69,15 @@ details.card > summary{cursor:pointer;font-weight:600;font-size:17px;list-style:
 details.card > summary::after{content:' ▾';color:var(--muted)}
 details.card[open] > summary{margin-bottom:12px}
 @media (max-width:640px){ .top h1{font-size:20px} table.t{font-size:13px} }
+
+/* ---------------------------------------------------------------- menu commun */
+.topnav{position:sticky;top:0;z-index:20;display:flex;gap:4px;align-items:center;padding:8px 14px;
+  background:var(--ink);overflow-x:auto;scrollbar-width:none;transition:opacity .6s}
+.topnav::-webkit-scrollbar{display:none}
+.topnav b{color:var(--vest);margin-right:10px;font-size:15px;letter-spacing:.04em}
+.topnav a{color:#C9CED3;text-decoration:none;padding:6px 12px;border-radius:99px;font-size:14px;white-space:nowrap}
+.topnav a:hover{color:#fff;background:#262E36}
+.topnav a.on{background:#fff;color:var(--ink);font-weight:600}
+.topnav.dark{border-bottom:1px solid #20272E}
+body.idle .topnav{opacity:.12}
+@media print{.topnav{display:none!important}}

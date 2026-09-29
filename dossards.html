@@ -47,7 +47,8 @@
 <div id="sheets"></div>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
-import {$,esc,boot,getNoms,readCfg,niveauxDe,courseDeClasse,niveauDe} from './app.js';
+import {$,esc,boot,getNoms,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar} from './app.js';
+navBar('dossards.html');
 const store=await boot();
 const noms=getNoms(store.key);
 let P={}, cfg=readCfg({});
@@ -58,7 +59,7 @@ function options(){
   const cur=$('sel').value;
   const cls=[...new Set(Object.values(P).filter(p=>!p.a).map(p=>p.c))].sort();
   let h='<option value="all">Tous les élèves</option>';
-  for(const id in cfg.courses) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (niveaux ${esc(cfg.courses[id].niveaux)})</option>`;
+  for(const id in cfg.courses) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (${cfg.courses[id].niveaux==='*'?'toutes les classes':'niveaux '+esc(cfg.courses[id].niveaux)}${cfg.courses[id].sexe?' · '+(cfg.courses[id].sexe==='F'?'filles':'garçons'):''})</option>`;
   h+=cls.map(c=>`<option value="cl:${esc(c)}">Classe ${esc(c)}</option>`).join('');
   h+='<option value="adultes">Adultes : dossards 901 à 950 (vierges)</option>';
   $('sel').innerHTML=h; if([...$('sel').options].some(o=>o.value===cur)) $('sel').value=cur;
@@ -73,10 +74,10 @@ function liste(){
   const v=$('sel').value;
   if(v==='adultes') return Array.from({length:50},(_,i)=>({d:901+i,bas:'Adulte'}));
   let L=Object.entries(P).filter(([d,p])=>!p.a).map(([d,p])=>({d:+d,p}));
-  if(v.startsWith('co:')) L=L.filter(x=>courseDeClasse(cfg,x.p.c)===v.slice(3));
+  if(v.startsWith('co:')) L=L.filter(x=>courseDeClasse(cfg,x.p.c,x.p.s||'')===v.slice(3));
   if(v.startsWith('cl:')) L=L.filter(x=>x.p.c===v.slice(3));
   const nm=x=>noms[x.d]?((noms[x.d].nom||'')+' '+(noms[x.d].prenom||'')):'';
-  const O={'6':0,'5':1,'4':2,'3':3};
+  const O={'6':0,'5':1,'4':2,'3':3,'2':4,'1':5,'T':6};
   if($('ord').value==='c') L.sort((a,b)=>(O[niveauDe(a.p.c)]??9)-(O[niveauDe(b.p.c)]??9)||a.p.c.localeCompare(b.p.c)||nm(a).localeCompare(nm(b))||a.d-b.d);
   else L.sort((a,b)=>a.d-b.d);
   return L.map(x=>{ const n=noms[x.d]; return {d:x.d,bas:x.p.c+(n?' · '+(n.prenom||'')+' '+(n.nom||''):'')}; });

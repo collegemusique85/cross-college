@@ -23,14 +23,15 @@
   </div>
   <div class="menu">
     <a class="main" href="scan.html" data-l><b>Tablettes de scan</b><span>Pour les élèves référents, à l'entrée des couloirs.</span></a>
-    <a href="direct.html" data-l><b>Classes en direct</b><span>À projeter pendant la course : moyenne de tours par élève.</span></a>
-    <a href="resultats.html" data-l><b>Podiums des groupes</b><span>À dévoiler à la fin, place par place.</span></a>
+    <a href="direct.html" data-l><b>En direct</b><span>À projeter pendant la course : classes, défi des profs, bouton de départ. Au lycée : ordre d'arrivée et temps.</span></a>
+    <a href="resultats.html" data-l><b>Podiums</b><span>Groupes et classes (collège), classements filles / garçons (lycée), à dévoiler place par place.</span></a>
     <a href="admin.html" data-l><b>Organisation</b><span>Départ et fin, tablettes, contrôle, adultes, dispenses, import, export.</span></a>
     <a href="dossards.html" data-l><b>Impression des dossards</b><span>Deux dossards par feuille A4.</span></a>
   </div>
 </div>
 <script type="module">
-import {$,boot,askKey,readCfg} from './app.js';
+import {$,boot,askKey,readCfg,navBar} from './app.js';
+navBar('index.html');
 const store=await boot();
 $('sub').textContent='Clé : '+store.key+' · '+(store.mode==='local'?'mode local':'synchronisé');
 store.onValue('config',c=>{ $('t').textContent=readCfg(c).titre; document.title=readCfg(c).titre; });

@@ -5,7 +5,7 @@
 // =============================================================================
 import CONFIG from './config.js';
 
-export const VERSION = '1.0';
+export const VERSION = '1.1';
 const FIREBASE_V = '12.19.0';
 
 // ---------------------------------------------------------------- utilitaires
@@ -130,8 +130,8 @@ export const DEFAULT_CFG = {
   delai:0,         // s : passages ignorés juste après le départ
   courant:'1',
   courses:{
-    '1':{nom:'Course 1',niveaux:'6,5',debut:null,fin:null},
-    '2':{nom:'Course 2',niveaux:'4,3',debut:null,fin:null}
+    '1':{nom:'Course 1',niveaux:'6,5',type:'tours',debut:null,fin:null},
+    '2':{nom:'Course 2',niveaux:'4,3',type:'tours',debut:null,fin:null}
   }
 };
 export function readCfg(raw){
@@ -139,20 +139,39 @@ export function readCfg(raw){
   const c={...DEFAULT_CFG,...raw};
   c.courses={};
   for(const id of new Set([...Object.keys(DEFAULT_CFG.courses),...Object.keys(raw.courses||{})]))
-    c.courses[id]={...(DEFAULT_CFG.courses[id]||{nom:'Course '+id,niveaux:''}),...((raw.courses||{})[id]||{})};
+    { const o={...(DEFAULT_CFG.courses[id]||{nom:'Course '+id,niveaux:'',type:'tours'}),...((raw.courses||{})[id]||{})};
+      if(!o.off) c.courses[id]=o; }   // off:true = course supprimée
   for(const k of ['absence','plafond','boucle','delai']) c[k]=+c[k]||0;
   if(!c.absence) c.absence=60;
   if(!c.boucle) c.boucle=0.8;
   if(!c.plafond) c.plafond=15;
   return c;
 }
-export function niveauDe(classe){ const m=String(classe||'').match(/\d/); return m?m[0]:'?'; }
+// Niveau = premier caractère de la classe : 601 → 6, 3PM → 3, TG1 → T, 2NDE3 → 2.
+export function niveauDe(classe){ const s=String(classe||'').trim().toUpperCase(); return s?s[0]:'?'; }
+export function libNiveau(n){ return n==='1'?'1<sup>re</sup>':/^\d$/.test(n)?n+'<sup>e</sup>':(n==='T'?'Term.':n); }
 export function niveauxDe(course){ return String(course&&course.niveaux||'').split(/[\s,;]+/).filter(Boolean); }
-export function courseDeClasse(cfg,classe){
-  const n=niveauDe(classe);
-  for(const id in cfg.courses) if(niveauxDe(cfg.courses[id]).includes(n)) return id;
+// Une classe appartient à une course si elle commence par l'un de ses « niveaux » (ou si la course accepte « * »).
+export function classeDansCourse(course,classe){
+  const n=niveauxDe(course), c=String(classe||'').toUpperCase();
+  if(n.includes('*')) return true;
+  return n.some(x=>c.startsWith(String(x).toUpperCase()));
+}
+export function courseDeClasse(cfg,classe,sexe){
+  for(const id in cfg.courses){ const co=cfg.courses[id];
+    if(sexe!==undefined&&co.sexe&&co.sexe!==sexe) continue;   // course réservée aux filles ou aux garçons
+    if(classeDansCourse(co,classe)) return id; }
   return null;
 }
+// Course d'un élève : tient compte du filtre filles/garçons éventuel.
+export const courseDe=(cfg,p)=>p?courseDeClasse(cfg,p.c,p.s||''):null;
+// Niveaux réellement présents dans une course, dans l'ordre de ses réglages.
+export function niveauxPresents(cfg,id,classes){
+  const ordre=niveauxDe(cfg.courses[id]), vus=[...new Set(classes.filter(c=>c.course===id).map(c=>c.niv))];
+  const rang=n=>{ const i=ordre.findIndex(o=>o!=='*'&&n.startsWith(o.toUpperCase()[0])); return i<0?99:i; };
+  return vus.sort((a,b)=>rang(a)-rang(b)||a.localeCompare(b));
+}
+export const estArrivee = c => c && c.type==='arrivee';
 export const estAdulteNum = d => d>=901 && d<=950;
 export const TYPES = {F:'Filles',G:'Garçons',M:'Mixte'};
 
@@ -166,7 +185,7 @@ export function compute(state){
   const started=Object.keys(win);
   const coursesDe=d=>{
     const p=P[d];
-    if(p&&!p.a){ const c=courseDeClasse(cfg,p.c); return c?[c]:[]; }
+    if(p&&!p.a){ const c=courseDe(cfg,p); return c?[c]:[]; }
     if(p&&p.a&&p.cr){ const c=courseDeClasse(cfg,p.cr); return c?[c]:started; }
     return started;
   };
@@ -189,6 +208,7 @@ export function compute(state){
     }
     R[d]={laps,first,last,nScans:list.length,hors:hors.length};
   }
+  const estAd=d=>{ const p=P[d]; return p?!!p.a:estAdulteNum(+d); };
   const corr={};
   for(const k in C){ const c=C[k]; if(c&&c.d!=null) corr[c.d]=(corr[c.d]||0)+(+c.delta||0); }
 
@@ -241,7 +261,7 @@ export function compute(state){
     if(!p&&L.nScans&&!estAdulteNum(+d)) A.inconnus.push(L);
     if(!p&&L.nScans&&estAdulteNum(+d)) A.adultesLibres.push(L);
     if(p&&p.st&&L.laps.length) A.dispenses.push(L);
-    if(p&&!p.a&&!p.st){ const cid=courseDeClasse(cfg,p.c); if(cid&&win[cid]&&L.tours===0) A.zero.push(L); }
+    if(p&&!p.a&&!p.st){ const cid=courseDe(cfg,p); if(cid&&win[cid]&&L.tours===0) A.zero.push(L); }
     A.hors+=L.hors;
     if(L.laps.length>=5){
       const s=[...L.iv].sort((a,b)=>a-b), med=s[Math.floor(s.length/2)];
@@ -255,10 +275,32 @@ export function compute(state){
   }
   A.plafond.sort((a,b)=>b.tours-a.tours);
 
+  // Défi « qui battra les profs ? » : moyenne des adultes, course par course
+  const profs={};
+  for(const id in cfg.courses){
+    let n=0,total=0;
+    for(const d in lignes){ if(!estAd(d)) continue; const L=lignes[d]; if(L.p&&L.p.st) continue;
+      const k=win[id]?L.laps.filter(t=>t>=win[id].a&&t<=win[id].b).length:0;
+      if(k>0){ n++; total+=k; } }
+    profs[id]={n,total,moy:n?total/n:0};
+  }
+
+  // Courses « à l'arrivée » : premier passage après le départ = arrivée
+  const arrivees={};
+  for(const id in cfg.courses){
+    const co=cfg.courses[id]; if(!estArrivee(co)) continue;
+    const L=Object.values(lignes).filter(x=>x.p&&!x.p.a&&!x.p.st&&courseDe(cfg,x.p)===id);
+    const arr=L.filter(x=>x.first!=null).sort((a,b)=>a.first-b.first);
+    const parSexe={F:0,G:0};
+    arr.forEach((x,i)=>{ x.rang=i+1; x.temps=co.debut?x.first-co.debut:null;
+      if(x.p.s) x.rangSexe=++parSexe[x.p.s]; });
+    arrivees[id]={inscrits:L.length,arrives:arr};
+  }
+
   const totaux={passages:0};
   for(const d in lignes) totaux.passages+=lignes[d].tours;
   totaux.km=totaux.passages*cfg.boucle;
-  return {cfg,lignes,classes,groupes,A,compte,totaux,win};
+  return {cfg,lignes,classes,groupes,A,compte,totaux,win,profs,arrivees};
 }
 
 // ---------------------------------------------------------------- noms (restent sur l'appareil)
@@ -362,7 +404,7 @@ export function prepareImport(rows,cfg,existing){
   const sansGrp={};
   for(const d in parts) if(!parts[d].g) sansGrp[parts[d].c]=(sansGrp[parts[d].c]||0)+1;
   const nsg=Object.values(sansGrp).reduce((a,b)=>a+b,0);
-  if(nsg) W.push(nsg+' élève'+(nsg>1?'s':'')+' sans groupe ('+Object.entries(sansGrp).map(([c,n])=>c+' : '+n).join(', ')+'). Ils comptent pour leur classe, pas pour un podium de groupe.');
+  if(nsg&&Object.values(cfg.courses).some(c=>!estArrivee(c))) W.push(nsg+' élève'+(nsg>1?'s':'')+' sans groupe ('+Object.entries(sansGrp).map(([c,n])=>c+' : '+n).join(', ')+'). Ils comptent pour leur classe, pas pour un podium de groupe.');
   const grp={};
   for(const d in parts){ const p=parts[d]; if(!p.g) continue;
     const k=p.c+'|'+(p.ty||'')+'|'+p.g; (grp[k]=grp[k]||[]).push({d,p}); }
@@ -394,19 +436,26 @@ export function exportWorkbook(res,state,noms){
       min(x.best),min(x.moy),x.corr||''])),[8,24,8,6,8,12,10,7,7,12,12,14,12,12,10]);
 
   const cl=[['Course','Niveau','Rang','Classe','Moyenne (tours / élève)','Tours élèves','Tours adultes','Total','Élèves ayant couru','Inscrits','Km']];
-  for(const id in cfg.courses) for(const n of niveauxDe(cfg.courses[id])){
-    res.classes.filter(c=>c.course===id&&c.niv===n).forEach((c,i)=>cl.push([cfg.courses[id].nom,n+'e',i+1,c.c,
+  for(const id in cfg.courses){ if(estArrivee(cfg.courses[id])) continue; for(const n of niveauxPresents(cfg,id,res.classes)){
+    res.classes.filter(c=>c.course===id&&c.niv===n).forEach((c,i)=>cl.push([cfg.courses[id].nom,/\d/.test(n)?n+'e':n,i+1,c.c,
       Math.round(c.moy*100)/100,c.te,c.ta,c.total,c.coureurs,c.inscrits,Math.round(c.km*10)/10]));
-  }
+  } }
+  for(const id in res.profs){ const pr=res.profs[id]; if(pr.n) cl.push([cfg.courses[id].nom,'—','défi','Les profs',
+    Math.round(pr.moy*100)/100,'',pr.total,pr.total,pr.n+' adulte(s)','','']); }
   add('Classes',cl,[12,8,6,8,20,12,12,8,16,8,8]);
 
   const gr=[['Niveau','Catégorie','Rang','Classe','Groupe','Moyenne','Membres ayant couru','Membres']];
-  for(const n of ['6','5','4','3']) for(const ty of ['F','G','M']){
+  for(const n of [...new Set(res.groupes.map(g=>g.niv))].sort((a,b)=>'6543'.indexOf(a)-'6543'.indexOf(b)||a.localeCompare(b))) for(const ty of ['F','G','M']){
     res.groupes.filter(g=>g.niv===n&&g.ty===ty).forEach((g,i)=>gr.push([n+'e',TYPES[ty],i+1,g.c,g.g,
       Math.round(g.moy*100)/100,g.coureurs,g.membres.map(m=>(nomDe(noms,m)||m.d)+' ('+m.tours+')').join(', ')]));
   }
   add('Groupes',gr,[8,10,6,8,8,10,18,70]);
 
+  for(const id in res.arrivees){
+    const A2=res.arrivees[id];
+    add(('Arrivée '+id+' '+cfg.courses[id].nom).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31),[['Rang','Rang F/G','Dossard','Nom','Classe','Sexe','Temps','Heure d\'arrivée']].concat(
+      A2.arrives.map(x=>[x.rang,x.rangSexe?x.rangSexe+(x.p.s==='F'?' F':' G'):'',x.d,nomDe(noms,x),x.p.c,x.p.s||'',fmtChrono(x.temps),fmtHeure(x.first)])),[6,9,8,24,8,6,10,14]);
+  }
   add('Adultes',[['Dossard','Nom','Classe créditée','Tours','Km']].concat(
     L.filter(x=>x.p&&x.p.a).map(x=>[x.d,x.p.n||'',x.p.cr||'(aucune)',x.tours,Math.round(x.tours*cfg.boucle*100)/100])),[8,24,14,8,8]);
 
@@ -465,6 +514,16 @@ export async function boot(){
     boot._reset=r||null;
   });
   return store;
+}
+
+// ---------------------------------------------------------------- menu commun
+export const PAGES=[['index.html','Accueil'],['scan.html','Tablettes'],['direct.html','Direct'],
+  ['resultats.html','Podiums'],['admin.html','Organisation'],['dossards.html','Dossards']];
+export function navBar(actif,dark){
+  const n=document.createElement('nav'); n.className='topnav'+(dark?' dark':'');
+  n.innerHTML='<b>Cross</b>'+PAGES.map(([h,l])=>'<a href="'+h+'"'+(h===actif?' class="on" aria-current="page"':'')+'>'+l+'</a>').join('');
+  document.body.prepend(n);
+  return n;
 }
 
 // ---------------------------------------------------------------- file d'envoi des scans
