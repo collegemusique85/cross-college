@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Podiums — Cross</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body{background:var(--ink);color:#fff;min-height:100vh}
+  .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,24px);min-height:100vh}
+  header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .k{font-size:clamp(13px,1.1vw,17px);letter-spacing:.14em;text-transform:uppercase;color:var(--vest);font-weight:700}
+  h1{font-size:clamp(28px,3.4vw,58px);line-height:1.05;letter-spacing:-.02em}
+  .nav{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font:inherit;font-size:clamp(13px,1vw,16px);padding:8px 14px;border-radius:99px;border:1px solid #39424B;background:none;color:#C9CED3;cursor:pointer}
+  .chip.on{background:#fff;color:var(--ink);border-color:#fff;font-weight:700}
+
+  .lock{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}
+  .lock p{color:#9AA3AB;max-width:44ch;font-size:clamp(15px,1.2vw,19px)}
+
+  .stage{flex:1;display:flex;flex-direction:column;gap:clamp(16px,2.4vh,30px)}
+  .cat{font-size:clamp(24px,2.6vw,44px);font-weight:800;letter-spacing:-.01em}
+  .cat span{color:#9AA3AB;font-weight:500}
+  .podium{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:end;gap:clamp(10px,1.6vw,26px);min-height:clamp(220px,36vh,440px)}
+  .step{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:12px;opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}
+  .step.show{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.step{transition:none}}
+  .who{text-align:center}
+  .who .g{font-size:clamp(22px,2.4vw,42px);font-weight:800;letter-spacing:-.01em}
+  .who .m{font-size:clamp(12px,1vw,16px);color:#C9CED3;margin-top:4px;line-height:1.35}
+  .block{border-radius:14px 14px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:clamp(10px,1.6vh,20px) 0 12px;background:#20272E}
+  .block .pl{font-size:clamp(40px,5vw,90px);font-weight:800;line-height:1}
+  .block .sc{font-size:clamp(14px,1.2vw,20px);color:#C9CED3;font-variant-numeric:tabular-nums}
+  .p1 .block{min-height:clamp(140px,21vh,240px);background:var(--vest);color:var(--vest-ink)}
+  .p1 .block .sc{color:var(--vest-ink)}
+  .p2 .block{min-height:clamp(112px,15vh,180px)}
+  .p2 .pl,.p3 .pl{font-size:clamp(34px,4vw,70px)!important}
+  .p3 .block{min-height:clamp(96px,11vh,140px)}
+  table.rk{width:100%;border-collapse:collapse;font-size:clamp(13px,1vw,17px)}
+  table.rk td,table.rk th{padding:8px 10px;border-bottom:1px solid #2B333B;text-align:left}
+  table.rk th{color:#9AA3AB;font-weight:600;font-size:.8em;text-transform:uppercase;letter-spacing:.06em}
+  table.rk td.n{font-variant-numeric:tabular-nums;font-weight:700}
+  .foot{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;color:#9AA3AB;font-size:13px}
+  .ghost{background:none;border:1px solid #39424B;color:#C9CED3;border-radius:8px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
+  .hint{color:#9AA3AB;font-size:13px}
+</style>
+</head>
+<body>
+<div class="scr">
+  <header>
+    <div><div class="k" id="kicker">Résultats</div><h1 id="title">Podiums des groupes</h1></div>
+    <div class="nav" id="nivs"></div>
+  </header>
+  <div class="nav" id="cats"></div>
+
+  <div class="lock" id="lock">
+    <p>Les podiums sont masqués. Ils se dévoilent place par place : 3<sup>e</sup>, 2<sup>e</sup>, puis 1<sup>re</sup> place, avec la flèche droite du clavier ou le bouton « Suivant ».</p>
+    <button class="btn vest" id="unlock" style="font-size:18px;padding:16px 26px">Dévoiler les podiums</button>
+  </div>
+
+  <div class="stage" id="stage" hidden>
+    <div class="cat" id="catTitle"></div>
+    <div class="podium" id="podium"></div>
+    <div class="row"><button class="btn vest" id="next">Suivant →</button><button class="ghost" id="all">Tout afficher</button>
+      <span class="hint">Flèches ← → du clavier</span></div>
+    <table class="rk" id="table" hidden></table>
+  </div>
+
+  <div class="foot">
+    <div class="row">
+      <button class="ghost" id="names">Afficher les noms (fichier Excel)</button>
+      <input type="file" id="nameFile" accept=".xlsx,.xls,.csv" hidden>
+      <button class="ghost" id="xls">Télécharger les résultats (Excel)</button>
+      <button class="ghost" id="relock">Masquer à nouveau</button>
+    </div>
+    <span id="net" class="pill"><i></i><span>…</span></span>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script type="module">
+import {$,esc,boot,compute,niveauxDe,fr1,TYPES,getNoms,setNoms,nomDe,parseWorkbook,exportWorkbook,LS} from './app.js';
+
+const store=await boot();
+const S={participants:{},scans:{},corrections:{},config:{}};
+let noms=getNoms(store.key), res=null, tm=null;
+store.onValue('participants',v=>{S.participants=v; later();});
+store.onValue('corrections',v=>{S.corrections=v; later();});
+store.onValue('config',v=>{S.config=v; later();});
+store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
+store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
+
+const CATS=[['F','Filles'],['G','Garçons'],['M','Mixtes'],['C','Classes']];
+const RK='cross.podium.'+store.key;
+let st=Object.assign({open:false,niv:null,cat:'F',step:0,all:false},LS.get(RK,{}));
+const save=()=>LS.set(RK,st);
+function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; res=compute(S); draw(); },600); }
+
+function niveaux(){
+  const out=[]; for(const id in res.cfg.courses) for(const n of niveauxDe(res.cfg.courses[id])) if(!out.includes(n)) out.push(n);
+  return out;
+}
+function liste(){
+  if(st.cat==='C') return res.classes.filter(c=>c.niv===st.niv&&c.total>0)
+    .map(c=>({lab:c.c,moy:c.moy,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),det:c.coureurs+' / '+c.inscrits+' élèves'}));
+  return res.groupes.filter(g=>g.niv===st.niv&&g.ty===st.cat&&g.moy>0).map(g=>({
+    lab:g.c+' · '+g.g, moy:g.moy,
+    sub:g.membres.filter(m=>!m.p.st).map(m=>(nomDe(noms,m)||('n° '+m.d))+' ('+m.tours+')').join(', '),
+    det:g.coureurs+' / '+g.membres.length}));
+}
+function rangs(L){ let r=0,prev=null; return L.map((x,i)=>{ const v=Math.round(x.moy*100); if(v!==prev){ r=i+1; prev=v; } return r; }); }
+
+function draw(){
+  if(!res) return;
+  const N=niveaux(); if(!st.niv||!N.includes(st.niv)) st.niv=N[0]||'6';
+  $('title').textContent=res.cfg.titre||'Cross du collège';
+  $('kicker').textContent='Podiums des groupes';
+  $('nivs').innerHTML=N.map(n=>`<button class="chip${n===st.niv?' on':''}" data-n="${n}">${n}<sup>e</sup></button>`).join('');
+  $('cats').innerHTML=CATS.map(([k,l])=>`<button class="chip${k===st.cat?' on':''}" data-c="${k}">${l}</button>`).join('');
+  $('lock').hidden=st.open; $('stage').hidden=!st.open;
+  if(!st.open) return;
+  const L=liste(), R=rangs(L);
+  $('catTitle').innerHTML=esc(st.niv)+'<sup>e</sup> · '+(st.cat==='C'?'Classes':'Groupes '+esc(TYPES[st.cat].toLowerCase()))+
+    ' <span>— moyenne de tours par '+(st.cat==='C'?'élève':'membre')+'</span>';
+  const slot=(i,cls)=>{ const x=L[i]; if(!x) return `<div class="step ${cls}"></div>`;
+    const vis=st.all||st.step>=3-i;
+    return `<div class="step ${cls}${vis?' show':''}"><div class="who"><div class="g">${esc(x.lab)}</div><div class="m">${esc(x.sub)}</div></div>
+      <div class="block"><div class="pl">${R[i]}</div><div class="sc">${fr1(x.moy)} tours</div></div></div>`; };
+  $('podium').innerHTML=L.length?slot(1,'p2')+slot(0,'p1')+slot(2,'p3'):'<div class="hint">Aucun résultat dans cette catégorie.</div>';
+  const done=st.all||st.step>=3;
+  $('next').textContent=done?'Catégorie suivante →':'Suivant →';
+  $('table').hidden=!done;
+  $('table').innerHTML='<tr><th>Rang</th><th>'+(st.cat==='C'?'Classe':'Groupe')+'</th><th>Moyenne</th><th>'+(st.cat==='C'?'Élèves ayant couru':'Membres ayant couru')+'</th><th>'+(st.cat==='C'?'Détail':'Tours de chacun')+'</th></tr>'+
+    L.map((x,i)=>`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b></td><td class="n">${fr1(x.moy)}</td><td>${esc(x.det)}</td><td>${esc(x.sub)}</td></tr>`).join('');
+  save();
+}
+function suite(){
+  const N=niveaux(), ci=CATS.findIndex(c=>c[0]===st.cat), ni=N.indexOf(st.niv);
+  if(!st.all&&st.step<3){ st.step++; draw(); return; }
+  if(ci<CATS.length-1) st.cat=CATS[ci+1][0]; else if(ni<N.length-1){ st.niv=N[ni+1]; st.cat=CATS[0][0]; }
+  st.step=0; st.all=false; draw();
+}
+function retour(){ if(st.step>0&&!st.all){ st.step--; draw(); } }
+$('nivs').onclick=e=>{ const b=e.target.closest('[data-n]'); if(b){ st.niv=b.dataset.n; st.step=0; st.all=false; draw(); } };
+$('cats').onclick=e=>{ const b=e.target.closest('[data-c]'); if(b){ st.cat=b.dataset.c; st.step=0; st.all=false; draw(); } };
+$('unlock').onclick=()=>{ st.open=true; st.step=0; draw(); };
+$('relock').onclick=()=>{ st.open=false; st.step=0; st.all=false; draw(); };
+$('next').onclick=suite;
+$('all').onclick=()=>{ st.all=true; draw(); };
+addEventListener('keydown',e=>{ if(!st.open) return; if(e.key==='ArrowRight'||e.key===' '){ e.preventDefault(); suite(); } if(e.key==='ArrowLeft') retour(); });
+
+$('names').onclick=()=>$('nameFile').click();
+$('nameFile').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const wb=XLSX.read(await f.arrayBuffer());
+  const {rows}=parseWorkbook(wb); const n={};
+  for(const r of rows){ const d=parseInt(r.dossard,10); if(d) n[d]={nom:r.nom,prenom:r.prenom}; }
+  noms={...noms,...n}; setNoms(store.key,noms);
+  alert(Object.keys(n).length+' noms chargés sur cet ordinateur. Ils ne sont envoyés nulle part.');
+  draw();
+};
+$('xls').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
+</script>
+</body>
+</html>

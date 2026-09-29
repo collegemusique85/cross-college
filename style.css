@@ -1,0 +1,71 @@
+/* Cross du collège — styles communs
+   Encre et papier pour l'administration ; fond sombre pour la projection et
+   les tablettes ; jaune « gilet de signaleur » comme seule couleur d'accent. */
+:root{
+  --ink:#101418; --ink2:#1A2026; --ink3:#262E36;
+  --paper:#F4F2EC; --paper2:#FFFFFF; --line:#D9D5CB;
+  --text:#15191D; --muted:#6A6F75;
+  --vest:#F2C230; --vest-ink:#2B2100;
+  --go:#12D67A; --go-ink:#04240F;
+  --warn:#E8A33A; --bad:#C8412E;
+  --r:10px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{font-family:var(--sans);background:var(--paper);color:var(--text);font-size:15px;line-height:1.5}
+a{color:inherit}
+.tab{font-variant-numeric:tabular-nums}
+
+.banner{padding:10px 16px;font-size:14px;text-align:center}
+.banner.warn{background:#FFF1C9;color:#5A4300}
+.banner.err{background:#F9DCD6;color:#6B1C10}
+
+.btn{font:inherit;font-size:14px;padding:10px 16px;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--paper2);color:var(--text);cursor:pointer;display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.btn:hover{border-color:#B7B1A4}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.vest{background:var(--vest);border-color:var(--vest);color:var(--vest-ink);font-weight:600}
+.btn.danger{color:var(--bad);border-color:#E6B6AD}
+.btn.small{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+input,select,textarea{font:inherit;font-size:15px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text)}
+
+.keygate{position:fixed;inset:0;z-index:50;background:rgba(16,20,24,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.keybox{background:var(--paper2);color:var(--text);border-radius:14px;padding:24px;max-width:380px;width:100%;display:flex;flex-direction:column;gap:12px}
+.keybox h2{font-size:19px}
+.keybox p{color:var(--muted);font-size:14px}
+
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;padding:5px 11px;border-radius:99px;background:var(--ink3);color:#fff;white-space:nowrap}
+.pill i{width:9px;height:9px;border-radius:50%;background:#888;display:inline-block}
+.pill.ok i{background:var(--go)} .pill.pend i{background:var(--warn)} .pill.off i{background:var(--bad)}
+
+/* ---------------------------------------------------------------- pages claires */
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.top h1{font-size:24px;letter-spacing:-.01em}
+.top .sub{color:var(--muted);font-size:14px}
+.card{background:var(--paper2);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+.card h2{font-size:18px;margin-bottom:4px}
+.card h2 + p{color:var(--muted);font-size:14px;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:8px;border-bottom:1px solid #ECE8DF;vertical-align:middle}
+table.t tr:last-child td{border-bottom:0}
+.msg{border-radius:10px;padding:10px 12px;font-size:14px;margin:6px 0}
+.msg.e{background:#F9DCD6;color:#6B1C10} .msg.w{background:#FFF1C9;color:#5A4300} .msg.o{background:#DDF5E8;color:#0B4A2B}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:#ECE8DF;color:#3B3F44}
+.tag.r{background:#F9DCD6;color:#6B1C10} .tag.o{background:#FFF1C9;color:#5A4300} .tag.g{background:#DDF5E8;color:#0B4A2B}
+.kpi{display:flex;flex-direction:column;gap:2px}
+.kpi b{font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi span{font-size:13px;color:var(--muted)}
+details.card > summary{cursor:pointer;font-weight:600;font-size:17px;list-style:none}
+details.card > summary::after{content:' ▾';color:var(--muted)}
+details.card[open] > summary{margin-bottom:12px}
+@media (max-width:640px){ .top h1{font-size:20px} table.t{font-size:13px} }

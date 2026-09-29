@@ -1,0 +1,12 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "events": {
+      "$cle": {
+        ".read": "$cle === 'REMPLACEZ-PAR-VOTRE-CLE'",
+        ".write": "$cle === 'REMPLACEZ-PAR-VOTRE-CLE'"
+      }
+    }
+  }
+}

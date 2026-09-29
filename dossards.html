@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dossards — Cross</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  @page{size:A4 portrait;margin:0}
+  .ctrl{max-width:1000px;margin:0 auto;padding:20px 16px}
+  .ctrl .row{margin-top:10px}
+  #sheets{display:flex;flex-direction:column;align-items:center;gap:18px;padding:10px 0 40px}
+  .sheet{width:210mm;height:297mm;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18);display:grid;grid-template-rows:148.5mm 148.5mm;overflow:hidden}
+  .half{position:relative;display:flex;align-items:center;padding:0 9mm;gap:8mm}
+  .half + .half{border-top:.3mm dashed #BBB}
+  .half svg{width:120mm;height:120mm;flex:none;shape-rendering:crispEdges}
+  .num{flex:1;text-align:center;font:800 38mm/1 Helvetica,Arial,sans-serif;letter-spacing:-.02em;color:#000}
+  .num.l4{font-size:28mm}
+  .foot{position:absolute;left:9mm;right:9mm;bottom:5mm;display:flex;justify-content:space-between;font:11pt Helvetica,Arial,sans-serif;color:#333}
+  .foot .pin{color:#999;font-size:8pt}
+  @media print{
+    body{background:#fff}
+    .ctrl,.banner{display:none!important}
+    #sheets{padding:0;gap:0}
+    .sheet{box-shadow:none;page-break-after:always;break-after:page}
+  }
+</style>
+</head>
+<body>
+<div class="ctrl">
+  <h1 style="font-size:22px">Impression des dossards</h1>
+  <p class="muted">Deux dossards par feuille A4, QR code de 12 cm. <b>Imprimer à l'échelle 100 %</b> (jamais « ajuster à la page »), sur papier ou carton mat, sans plastification.</p>
+  <div class="row">
+    <label>Quels dossards
+      <select id="sel">
+        <option value="all">Tous les élèves</option>
+      </select></label>
+    <label>Ordre
+      <select id="ord"><option value="c">Par classe puis nom</option><option value="n">Par numéro</option></select></label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="withNames" checked> Imprimer classe et nom en bas</label>
+  </div>
+  <div class="row">
+    <button class="btn vest" id="print">Imprimer</button>
+    <span class="muted small" id="info"></span>
+  </div>
+</div>
+<div id="sheets"></div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script type="module">
+import {$,esc,boot,getNoms,readCfg,niveauxDe,courseDeClasse,niveauDe} from './app.js';
+const store=await boot();
+const noms=getNoms(store.key);
+let P={}, cfg=readCfg({});
+store.onValue('participants',v=>{ P=v||{}; options(); draw(); });
+store.onValue('config',v=>{ cfg=readCfg(v); options(); });
+
+function options(){
+  const cur=$('sel').value;
+  const cls=[...new Set(Object.values(P).filter(p=>!p.a).map(p=>p.c))].sort();
+  let h='<option value="all">Tous les élèves</option>';
+  for(const id in cfg.courses) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (niveaux ${esc(cfg.courses[id].niveaux)})</option>`;
+  h+=cls.map(c=>`<option value="cl:${esc(c)}">Classe ${esc(c)}</option>`).join('');
+  h+='<option value="adultes">Adultes : dossards 901 à 950 (vierges)</option>';
+  $('sel').innerHTML=h; if([...$('sel').options].some(o=>o.value===cur)) $('sel').value=cur;
+}
+function qrSvg(d){
+  const q=qrcode(1,'H'); q.addData(String(d),'Numeric'); q.make();
+  const n=q.getModuleCount(), m=4, W=n+2*m; let r='';
+  for(let y=0;y<n;y++) for(let x=0;x<n;x++) if(q.isDark(y,x)) r+=`M${x+m} ${y+m}h1v1h-1z`;
+  return `<svg viewBox="0 0 ${W} ${W}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${W}" fill="#fff"/><path d="${r}" fill="#000"/></svg>`;
+}
+function liste(){
+  const v=$('sel').value;
+  if(v==='adultes') return Array.from({length:50},(_,i)=>({d:901+i,bas:'Adulte'}));
+  let L=Object.entries(P).filter(([d,p])=>!p.a).map(([d,p])=>({d:+d,p}));
+  if(v.startsWith('co:')) L=L.filter(x=>courseDeClasse(cfg,x.p.c)===v.slice(3));
+  if(v.startsWith('cl:')) L=L.filter(x=>x.p.c===v.slice(3));
+  const nm=x=>noms[x.d]?((noms[x.d].nom||'')+' '+(noms[x.d].prenom||'')):'';
+  const O={'6':0,'5':1,'4':2,'3':3};
+  if($('ord').value==='c') L.sort((a,b)=>(O[niveauDe(a.p.c)]??9)-(O[niveauDe(b.p.c)]??9)||a.p.c.localeCompare(b.p.c)||nm(a).localeCompare(nm(b))||a.d-b.d);
+  else L.sort((a,b)=>a.d-b.d);
+  return L.map(x=>{ const n=noms[x.d]; return {d:x.d,bas:x.p.c+(n?' · '+(n.prenom||'')+' '+(n.nom||''):'')}; });
+}
+function draw(){
+  const L=liste(), wn=$('withNames').checked;
+  const half=x=>x?`<div class="half">${qrSvg(x.d)}<div class="num${String(x.d).length>3?' l4':''}">${x.d}</div>
+    <div class="foot"><span>${wn?esc(x.bas):''}</span><span class="pin">épingler aux 4 coins</span></div></div>`:'<div class="half"></div>';
+  let h='';
+  for(let i=0;i<L.length;i+=2) h+=`<div class="sheet">${half(L[i])}${half(L[i+1])}</div>`;
+  $('sheets').innerHTML=h||'<p class="muted">Aucun participant : importez d\'abord la liste dans la page Organisation.</p>';
+  $('info').textContent=L.length?L.length+' dossards · '+Math.ceil(L.length/2)+' feuilles':'';
+}
+$('sel').onchange=draw; $('ord').onchange=draw; $('withNames').onchange=draw;
+$('print').onclick=()=>window.print();
+</script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scan cross">
+<title>Scan — Cross</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html,body{height:100%;background:#000;color:#fff;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+  #stage{position:fixed;inset:0;background:#000}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #gate{position:absolute;pointer-events:none}
+  #gate i{position:absolute;width:40px;height:40px;border:4px solid var(--vest)}
+  #gate i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+  #gate i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+  #gate i:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+  #gate i:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+
+  #flood{position:absolute;inset:0;z-index:6;display:none;flex-direction:column;align-items:center;justify-content:center;background:var(--go);color:var(--go-ink)}
+  #flood.on{display:flex}
+  #flood b{font-size:min(34vw,34vh);font-weight:800;letter-spacing:-.04em;line-height:.9;font-variant-numeric:tabular-nums}
+  #flood span{font-size:22px;font-weight:600;opacity:.75;margin-top:10px}
+
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:calc(10px + env(safe-area-inset-top)) 14px 22px;background:linear-gradient(#000C,#0000)}
+  #devlabel{font-size:20px;font-weight:700}
+  #count{font-size:15px;opacity:.85;font-variant-numeric:tabular-nums}
+  #bottombar{position:absolute;left:0;right:0;bottom:0;z-index:4;display:flex;gap:12px;align-items:center;
+    padding:22px 14px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(#0000,#000D)}
+  .bb{font:inherit;font-size:19px;font-weight:600;border:0;border-radius:14px;padding:18px 20px;color:#fff;background:#2A3139;cursor:pointer}
+  #kbBtn{flex:1;background:#F4F2EC;color:#101418}
+  #callBtn.on{background:var(--bad);animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.55}}
+  @media (prefers-reduced-motion:reduce){#callBtn.on{animation:none}}
+
+  .sheet{position:absolute;inset:0;z-index:8;display:none;background:#101418F2;overflow:auto}
+  .sheet.on{display:block}
+  .sheet .in{max-width:520px;margin:0 auto;padding:calc(24px + env(safe-area-inset-top)) 18px 40px;display:flex;flex-direction:column;gap:14px}
+  .sheet h2{font-size:22px}
+  .sheet p{color:#AEB4BA;font-size:15px}
+  .sheet label{font-size:14px;color:#AEB4BA;display:flex;flex-direction:column;gap:6px}
+  .sheet input[type=text],.sheet select{background:#1A2026;color:#fff;border:1px solid #39424B;font-size:18px;padding:12px}
+  .sheet input[type=range]{accent-color:var(--vest)}
+  .sheet .btn{justify-content:center;font-size:16px;padding:14px}
+  .sheet .btn:not(.vest):not(.primary){background:#1A2026;color:#fff;border-color:#39424B}
+  #diag{font-family:var(--mono);font-size:12px;color:#AEB4BA;white-space:pre-wrap}
+
+  /* clavier */
+  #kb .in{max-width:420px;gap:12px}
+  #kbDisp{font-size:64px;font-weight:800;text-align:center;letter-spacing:.04em;font-variant-numeric:tabular-nums;min-height:84px;background:#1A2026;border-radius:14px;padding:6px}
+  #kbInfo{text-align:center;font-size:17px;min-height:26px}
+  #kbInfo.bad{color:#FF8A76} #kbInfo.ok{color:var(--go)}
+  #kbKeys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  #kbKeys button{font:inherit;font-size:30px;font-weight:600;padding:16px 0;border-radius:14px;border:0;background:#2A3139;color:#fff}
+  #kbKeys button.v{background:var(--go);color:var(--go-ink)}
+  #kbKeys button.v:disabled{opacity:.35}
+
+  #alarm{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);z-index:5;background:var(--bad);color:#fff;text-align:center;padding:18px;font-weight:600;display:none}
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="v" playsinline muted autoplay></video>
+  <div id="gate"><i></i><i></i><i></i><i></i></div>
+  <div id="alarm">Lecture dégradée — ouvrir ⚙ puis « Relancer la caméra »</div>
+  <div id="flood"><b id="floodNum">—</b><span id="floodSub"></span></div>
+
+  <div id="topbar">
+    <div><div id="devlabel">—</div><div id="count">0 passage</div></div>
+    <span class="pill" id="net"><i></i><span>connexion…</span></span>
+  </div>
+  <div id="bottombar">
+    <button class="bb" id="kbBtn">⌨︎  Taper un numéro</button>
+    <button class="bb" id="callBtn">Appeler</button>
+    <button class="bb" id="setBtn" aria-label="Réglages">⚙</button>
+  </div>
+
+  <!-- démarrage -->
+  <div class="sheet on" id="boot"><div class="in">
+    <h2>Scan des dossards</h2>
+    <p>Si l'écran devient vert, le coureur passe. S'il ne se passe rien, demande-lui de te montrer son dossard. Si ça ne lit toujours pas, tape son numéro.</p>
+    <label>Nom de cette tablette
+      <input type="text" id="devname" placeholder="ex. Couloir 1" autocomplete="off"></label>
+    <button class="btn vest" id="startBtn">Démarrer</button>
+    <div id="diag"></div>
+  </div></div>
+
+  <!-- clavier -->
+  <div class="sheet" id="kb"><div class="in">
+    <div id="kbDisp"></div>
+    <div id="kbInfo"></div>
+    <div id="kbKeys"></div>
+    <button class="btn" id="kbClose">Annuler</button>
+  </div></div>
+
+  <!-- réglages -->
+  <div class="sheet" id="set"><div class="in">
+    <h2>Réglages de la tablette</h2>
+    <label>Nom de la tablette <input type="text" id="devname2" autocomplete="off"></label>
+    <label>Largeur de la zone de lecture : <span id="zwv"></span>
+      <input type="range" id="zw" min="20" max="100"></label>
+    <label>Hauteur de la zone de lecture : <span id="zhv"></span>
+      <input type="range" id="zh" min="20" max="100"></label>
+    <label>Son de validation
+      <select id="tone">
+        <option value="0">1 — grave</option><option value="1">2 — médium</option><option value="2">3 — aigu</option>
+        <option value="3">4 — double bip</option><option value="4">5 — montant</option><option value="5">6 — descendant</option>
+      </select></label>
+    <label style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" id="speak"> Annoncer le numéro à voix haute</label>
+    <button class="btn" id="relaunch">Relancer la caméra</button>
+    <button class="btn" id="exportBtn">Enregistrer mes passages (fichier CSV)</button>
+    <button class="btn primary" id="setClose">Fermer</button>
+    <p id="about" class="small"></p>
+  </div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script type="module">
+import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure} from './app.js';
+
+const store=await boot();
+const Q=new ScanQueue(store);
+const V=$('v'), FLOOD=$('flood');
+const cv=document.createElement('canvas'), cx=cv.getContext('2d',{willReadFrequently:true});
+
+// ------------------------------------------------------------ réglages locaux
+const UI=Object.assign({w:0.8,h:0.6,tone:'1',speak:true,dev:''},LS.get('cross.scan.ui',{}));
+const saveUI=()=>LS.set('cross.scan.ui',UI);
+$('devname').value=UI.dev; $('devname2').value=UI.dev;
+$('zw').value=Math.round(UI.w*100); $('zh').value=Math.round(UI.h*100);
+$('tone').value=UI.tone; $('speak').checked=UI.speak;
+const showZone=()=>{ $('zwv').textContent=Math.round(UI.w*100)+' %'; $('zhv').textContent=Math.round(UI.h*100)+' %'; };
+showZone();
+const devName=()=>safeKey(UI.dev)||'tablette';
+
+// ------------------------------------------------------------ participants
+let P=LS.get('cross.parts.'+store.key,{})||{};
+store.onValue('participants',v=>{ P=v||{}; LS.set('cross.parts.'+store.key,P); about(); });
+function about(){
+  $('about').textContent='Version '+VERSION+' · '+(store.mode==='local'?'mode local':'synchronisé')+
+    ' · '+Object.keys(P).length+' participants connus · clé '+store.key;
+}
+
+// Après une remise à zéro par l'organisateur, on oublie les passages antérieurs.
+store.onValue('config',c=>{
+  if(c&&c.resetAt){ const n=Q.list.length; Q.list=Q.list.filter(s=>s.t>=c.resetAt);
+    if(Q.list.length!==n){ Q.save(); Q.notify(); countLabel(); } }
+});
+
+// ------------------------------------------------------------ état réseau
+let connected=false;
+store.onConnected(c=>{ connected=c; netPill(); });
+Q.onChange(()=>{ netPill(); countLabel(); });
+setInterval(netPill,3000);
+function netPill(){
+  const s=Q.stat(), el=$('net'), txt=el.querySelector('span');
+  el.className='pill';
+  if(store.mode==='local'){ el.classList.add('pend'); txt.textContent='local · '+s.total; return; }
+  if(!s.pending){ el.classList.add(connected?'ok':'pend'); txt.textContent=connected?'synchronisé':'hors ligne'; return; }
+  const vieux=s.lastOk&&Date.now()-s.lastOk>120000 || (!s.lastOk&&s.lastErr);
+  el.classList.add(vieux||!connected?'off':'pend');
+  txt.textContent=s.pending+' en attente';
+}
+function countLabel(){ const n=Q.stat().total; $('count').textContent=n+' passage'+(n>1?'s':''); }
+
+// ------------------------------------------------------------ présence et appel
+// Champs écrits un par un : l'accusé de réception posé par l'admin n'est jamais écrasé.
+let calling=false, callAt=0;
+function heartbeat(){
+  const s=Q.stat(), b='devices/'+devName()+'/';
+  store.update({[b+'t']:store.now(),[b+'n']:s.total,[b+'p']:s.pending,[b+'call']:calling,
+    [b+'callAt']:callAt,[b+'dec']:DEC,[b+'v']:VERSION}).catch(()=>{});
+}
+setInterval(heartbeat,10000);
+function setCall(on){
+  calling=on; if(on) callAt=store.now();
+  $('callBtn').classList.toggle('on',calling);
+  $('callBtn').textContent=calling?'Appel envoyé':'Appeler';
+  heartbeat();
+}
+store.onValue('devices',v=>{
+  const me=v&&v[devName()];
+  if(calling&&me&&me.ackAt&&me.ackAt>=callAt){ calling=false; $('callBtn').classList.remove('on'); $('callBtn').textContent='On arrive !';
+    setTimeout(()=>{ if(!calling) $('callBtn').textContent='Appeler'; },6000); }
+});
+$('callBtn').onclick=()=>setCall(!calling);
+
+// ------------------------------------------------------------ son et voix
+let audio=null;
+const TONES=[[[440,0,.18]],[[660,0,.18]],[[1000,0,.18]],[[880,0,.08],[880,.12,.08]],[[520,0,.08],[780,.09,.12]],[[900,0,.08],[600,.09,.12]]];
+function beep(){
+  if(!audio) return;
+  const seq=TONES[+UI.tone]||TONES[0], t0=audio.currentTime;
+  for(const n of seq){
+    const o=audio.createOscillator(), g=audio.createGain();
+    o.type='square'; o.frequency.value=n[0]; o.connect(g); g.connect(audio.destination);
+    const s=t0+n[1], e=s+n[2];
+    g.gain.setValueAtTime(.0001,s); g.gain.exponentialRampToValueAtTime(.9,s+.01);
+    g.gain.setValueAtTime(.9,e-.02); g.gain.exponentialRampToValueAtTime(.0001,e);
+    o.start(s); o.stop(e+.01);
+  }
+}
+let VOIX=null, voixLoading=false, voixSrc=null;
+const voixBuf={}, voixOrder=[];
+function loadVoices(){
+  if(VOIX||voixLoading) return; voixLoading=true;
+  fetch('voix.json',{cache:'force-cache'}).then(r=>{ if(!r.ok) throw 0; return r.json(); })
+    .then(j=>{ VOIX=j; }).catch(()=>{ voixLoading=false; });
+}
+function speak(d){
+  if(!audio||!UI.speak||!VOIX) return;
+  const c=String(d);
+  const play=b=>{ try{ if(voixSrc) try{voixSrc.stop()}catch(e){}
+    const s=audio.createBufferSource(); s.buffer=b; s.connect(audio.destination); s.start(); voixSrc=s; }catch(e){} };
+  if(voixBuf[c]) return play(voixBuf[c]);
+  if(!VOIX[c]) return;
+  try{
+    const bin=atob(VOIX[c]), a=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i);
+    audio.decodeAudioData(a.buffer,b=>{ voixBuf[c]=b; voixOrder.push(c);
+      if(voixOrder.length>150) delete voixBuf[voixOrder.shift()]; play(b); },()=>{});
+  }catch(e){}
+}
+
+// ------------------------------------------------------------ enregistrement d'un passage
+const vuLocal={};                     // dossard -> dernière lecture sur cette tablette
+const LOCAL_GAP=8000;                 // en deçà, c'est le même passage devant la caméra
+function describe(d){
+  const p=P[d];
+  if(p&&p.a) return 'Adulte'+(p.cr?' · '+p.cr:'');
+  if(p) return p.c+(p.st?' · '+(p.st==='absent'?'absent':'dispensé'):'');
+  if(estAdulteNum(d)) return 'Adulte';
+  return '';
+}
+function record(d,mode){
+  Q.add({id:uid(),d,t:store.now(),v:devName(),m:mode});
+  $('floodNum').textContent=d; $('floodSub').textContent=describe(d);
+  FLOOD.classList.add('on'); beep(); setTimeout(()=>speak(d),190);
+  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.classList.remove('on'),450);
+  countLabel();
+}
+function onHit(text){
+  const s=String(text).trim();
+  if(!/^\d{1,3}$/.test(s)) return;          // un autre QR code dans le champ : ignoré
+  const d=+s; if(d<1) return;
+  const now=performance.now(), last=vuLocal[d];
+  vuLocal[d]=now;
+  if(last&&now-last<LOCAL_GAP) return;
+  record(d,'c');
+}
+
+// ------------------------------------------------------------ clavier de secours
+let kb='';
+const keys=['1','2','3','4','5','6','7','8','9','⌫','0','OK'];
+$('kbKeys').innerHTML=keys.map(k=>'<button data-k="'+k+'"'+(k==='OK'?' class="v" id="kbOk"':'')+'>'+(k==='OK'?'Valider':k)+'</button>').join('');
+function kbRefresh(){
+  $('kbDisp').textContent=kb||' ';
+  const info=$('kbInfo'), d=+kb, n=Object.keys(P).length;
+  let ok=false; info.className='';
+  if(!kb){ info.textContent='Numéro du dossard'; }
+  else if(P[d]||estAdulteNum(d)){ ok=true; info.className='ok'; info.textContent=describe(d)||'Dossard '+d; }
+  else if(!n){ ok=d>=1&&d<=999; info.textContent='Liste des participants pas encore chargée'; }
+  else { info.className='bad'; info.textContent='Ce numéro n\'existe pas'; }
+  $('kbOk').disabled=!ok;
+}
+$('kbKeys').onclick=e=>{
+  const k=e.target.closest('button'); if(!k) return;
+  const v=k.dataset.k;
+  if(v==='⌫') kb=kb.slice(0,-1);
+  else if(v==='OK'){ if(!$('kbOk').disabled){ const d=+kb; kb=''; $('kb').classList.remove('on'); record(d,'k'); vuLocal[d]=performance.now(); return; } }
+  else if(kb.length<3) kb=(kb+v).replace(/^0+/,'');
+  kbRefresh();
+};
+$('kbBtn').onclick=()=>{ kb=''; kbRefresh(); $('kb').classList.add('on'); };
+$('kbClose').onclick=()=>$('kb').classList.remove('on');
+
+// ------------------------------------------------------------ réglages
+$('setBtn').onclick=()=>{ $('devname2').value=UI.dev; $('set').classList.add('on'); };
+$('setClose').onclick=()=>{ $('set').classList.remove('on'); };
+$('devname2').oninput=e=>{ UI.dev=e.target.value; saveUI(); $('devlabel').textContent=UI.dev; };
+$('zw').oninput=e=>{ UI.w=e.target.value/100; saveUI(); showZone(); layoutGate(); };
+$('zh').oninput=e=>{ UI.h=e.target.value/100; saveUI(); showZone(); layoutGate(); };
+$('tone').onchange=e=>{ UI.tone=e.target.value; saveUI(); beep(); };
+$('speak').onchange=e=>{ UI.speak=e.target.checked; saveUI(); };
+$('relaunch').onclick=()=>{ if(DEC!=='zxing'&&window.ZXingWASM){ zxErrors=0; DEC='zxing'; prepareZX(); alarm(false); } restart(); $('set').classList.remove('on'); };
+$('exportBtn').onclick=()=>{
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  download('passages-'+devName()+'-'+p(d.getDate())+p(d.getMonth()+1)+'-'+p(d.getHours())+p(d.getMinutes())+'.csv',Q.csv(devName()));
+};
+
+// ------------------------------------------------------------ décodeur
+let DEC='zxing', busy=false, zxErrors=0;
+function alarm(on){ $('alarm').style.display=on?'block':'none'; }
+function prepareZX(){
+  if(!window.ZXingWASM||!ZXingWASM.prepareZXingModule) return;
+  try{
+    const p=ZXingWASM.prepareZXingModule({fireImmediately:true});
+    if(p&&p.then) p.then(()=>{ zxErrors=0; if(DEC!=='zxing'){ DEC='zxing'; alarm(false); } },()=>alarm(true));
+  }catch(e){ alarm(true); }
+}
+if(!window.ZXingWASM){ DEC='jsqr'; setTimeout(()=>alarm(true),1500); } else prepareZX();
+function decode(img,cb){
+  if(DEC==='jsqr'){
+    const r=window.jsQR?jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'}):null;
+    cb(r&&r.data?[r.data]:null); return;
+  }
+  busy=true;
+  ZXingWASM.readBarcodes(img,{formats:['QRCode'],tryHarder:false,tryRotate:true,maxNumberOfSymbols:8})
+    .then(res=>{ busy=false; zxErrors=0; cb(res&&res.length?res.map(r=>r.text!=null?r.text:(r.rawValue||'')).filter(Boolean):null); },
+          ()=>{ busy=false; zxErrors++;
+            if(zxErrors>=10){ DEC='jsqr'; alarm(true); setTimeout(prepareZX,5000); }
+            cb(null); });
+}
+
+// ------------------------------------------------------------ caméra
+let track=null, running=false, epoch=0;
+function layoutGate(){
+  const g=$('gate'), vw=V.videoWidth, vh=V.videoHeight;
+  let w,h;
+  if(vw&&vh){ const k=Math.max(innerWidth/vw,innerHeight/vh); w=vw*UI.w*k; h=vh*UI.h*k; }
+  else { w=innerWidth*UI.w; h=innerHeight*UI.h; }
+  w=Math.min(w,innerWidth); h=Math.min(h,innerHeight);
+  Object.assign(g.style,{width:w+'px',height:h+'px',left:(innerWidth-w)/2+'px',top:(innerHeight-h)/2+'px'});
+}
+function tick(my){
+  if(!running||my!==epoch) return;
+  const nx=()=>tick(my);
+  if(busy){ requestAnimationFrame(nx); return; }
+  const vw=V.videoWidth, vh=V.videoHeight;
+  if(vw&&vh){
+    const sw=Math.round(vw*UI.w), sh=Math.round(vh*UI.h);
+    const sx=Math.round((vw-sw)/2), sy=Math.round((vh-sh)/2);
+    const budget=DEC==='zxing'?1400000:320000, k=Math.min(1,Math.sqrt(budget/(sw*sh)));
+    const dw=Math.max(80,Math.round(sw*k)), dh=Math.max(60,Math.round(sh*k));
+    if(cv.width!==dw||cv.height!==dh){ cv.width=dw; cv.height=dh; }
+    cx.drawImage(V,sx,sy,sw,sh,0,0,dw,dh);
+    decode(cx.getImageData(0,0,dw,dh),list=>{ if(list) list.forEach(onHit); });
+  }
+  if(V.requestVideoFrameCallback) V.requestVideoFrameCallback(nx); else requestAnimationFrame(nx);
+}
+const PLAN=[
+  ['1080p 60 img/s',{audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60}}}],
+  ['1080p',{audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}}],
+  ['caméra arrière',{audio:false,video:{facingMode:'environment'}}],
+  ['caméra par défaut',{audio:false,video:true}]
+];
+async function openCamera(){
+  const tries=[];
+  for(const [nom,c] of PLAN){
+    try{ return await navigator.mediaDevices.getUserMedia(c); }
+    catch(e){ tries.push(nom+' : '+e.name); $('diag').textContent='Ouverture de la caméra…\n'+tries.join('\n'); await new Promise(r=>setTimeout(r,350)); }
+  }
+  throw new Error(tries.join('\n'));
+}
+async function launch(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('diag').textContent='Aucun accès à la caméra. La page doit être ouverte en https dans Safari.'; $('boot').classList.add('on'); return;
+  }
+  try{
+    const s=await openCamera();
+    V.srcObject=s; track=s.getVideoTracks()[0]; await V.play();
+    $('boot').classList.remove('on');
+    running=true; layoutGate(); setTimeout(layoutGate,400); epoch++; tick(epoch);
+    track.onended=()=>restart();
+    track.onmute=()=>setTimeout(()=>{ if(track&&track.muted) restart(); },6000);
+    reWake();
+  }catch(e){
+    $('boot').classList.add('on');
+    $('diag').textContent='La caméra n\'a pas démarré.\n'+(e.message||e)+'\n\nSi tout indique AbortError, une autre app ou un autre onglet utilise la caméra : fermez-les puis réessayez.';
+  }
+}
+function restart(){ running=false; epoch++; if(track){ try{track.stop()}catch(e){} track=null; } setTimeout(launch,250); }
+function reWake(){ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(()=>{}); }
+function healthCheck(){
+  if(!running) return;
+  if(!track||track.readyState==='ended'||!V.videoWidth) restart();
+  else if(V.paused) V.play().catch(()=>{});
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ reWake(); setTimeout(healthCheck,500); if(audio) audio.resume(); } });
+addEventListener('pageshow',()=>setTimeout(healthCheck,500));
+setInterval(healthCheck,4000);
+addEventListener('resize',layoutGate);
+addEventListener('orientationchange',()=>setTimeout(layoutGate,300));
+
+// ------------------------------------------------------------ démarrage
+$('startBtn').onclick=()=>{
+  const n=$('devname').value.trim();
+  if(!n){ $('devname').focus(); $('diag').textContent='Donne un nom à la tablette (ex. Couloir 1).'; return; }
+  UI.dev=n; saveUI(); $('devlabel').textContent=n; $('devname2').value=n;
+  try{ audio=new (window.AudioContext||window.webkitAudioContext)(); audio.resume(); }catch(e){}
+  loadVoices(); heartbeat(); launch();
+};
+$('devlabel').textContent=UI.dev||'—';
+countLabel(); about(); netPill();
+</script>
+</body>
+</html>

@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Organisation — Cross</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
+  .course:first-of-type{border-top:0}
+  .course h3{font-size:17px}
+  .chrono{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .dev-call{background:#F9DCD6}
+  .dev-call td:first-child{font-weight:700;color:#6B1C10}
+  .qr svg{width:120px;height:120px;display:block}
+  .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .links .card{margin:0}
+  .links code{font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--muted)}
+  #callBanner{position:sticky;top:0;z-index:5;background:var(--bad);color:#fff;padding:12px 16px;font-weight:700;display:none;text-align:center}
+  .num{font-variant-numeric:tabular-nums}
+  .scroll{max-height:360px;overflow:auto}
+  .inline{display:inline-flex;gap:6px;align-items:center}
+</style>
+</head>
+<body>
+<div id="callBanner"></div>
+<div class="wrap">
+  <div class="top">
+    <div><h1 id="h1">Organisation du cross</h1><div class="sub" id="sub"></div></div>
+    <div class="row">
+      <span class="pill" id="net"><i></i><span>…</span></span>
+      <button class="btn small" id="sound">🔔 Activer les alertes sonores</button>
+    </div>
+  </div>
+
+  <!-- COURSES ------------------------------------------------------------>
+  <div class="card">
+    <h2>Courses</h2>
+    <p>Le comptage ne prend en compte que les passages entre le départ et la fin de la course de chaque élève.</p>
+    <div id="courses"></div>
+  </div>
+
+  <!-- TABLETTES ---------------------------------------------------------->
+  <div class="card">
+    <h2>Tablettes</h2>
+    <p>Une tablette qui n'a pas donné de nouvelles depuis plus d'une minute apparaît en orange.</p>
+    <div id="devices"></div>
+  </div>
+
+  <!-- CONTRÔLE ----------------------------------------------------------->
+  <div class="card">
+    <h2>Contrôle</h2>
+    <p>Tout ce qui mérite un coup d'œil, au même endroit. Chaque décision est enregistrée et visible dans l'export.</p>
+    <div id="control"></div>
+  </div>
+
+  <!-- DOSSARD : dispense, correction -------------------------------------->
+  <div class="card">
+    <h2>Un dossard en particulier</h2>
+    <p>Dispense de dernière minute, absence, ou correction manuelle d'un nombre de tours.</p>
+    <div class="row"><input id="qD" inputmode="numeric" placeholder="n° de dossard" style="width:160px"><button class="btn" id="qGo">Afficher</button></div>
+    <div id="qOut" style="margin-top:12px"></div>
+  </div>
+
+  <!-- ADULTES ------------------------------------------------------------>
+  <div class="card">
+    <h2>Adultes (dossards 901 à 950)</h2>
+    <p>Attribuez un dossard à la volée. Les passages déjà faits avec ce dossard sont repris automatiquement.</p>
+    <div class="row">
+      <input id="aD" inputmode="numeric" placeholder="901" style="width:100px">
+      <select id="aC"></select>
+      <input id="aN" placeholder="Nom (facultatif)" style="flex:1;min-width:160px">
+      <button class="btn primary" id="aSave">Enregistrer</button>
+    </div>
+    <div id="adults" style="margin-top:12px"></div>
+  </div>
+
+  <!-- PARTICIPANTS ------------------------------------------------------->
+  <div class="card">
+    <h2>Participants</h2>
+    <p>Importez le fichier Excel des élèves. Les noms restent sur cet ordinateur : seuls les numéros, classes, sexes et groupes sont envoyés en ligne.</p>
+    <div class="row">
+      <input type="file" id="xFile" accept=".xlsx,.xls,.csv" hidden>
+      <button class="btn primary" id="xPick">Importer un fichier Excel…</button>
+      <button class="btn" id="xTpl">Télécharger le modèle</button>
+      <a class="btn" id="printLink" href="dossards.html" target="_blank">Imprimer les dossards</a>
+    </div>
+    <div id="xOut" style="margin-top:12px"></div>
+    <div id="pStats" class="muted small" style="margin-top:10px"></div>
+  </div>
+
+  <!-- LIENS -------------------------------------------------------------->
+  <div class="card">
+    <h2>Liens à ouvrir</h2>
+    <p>Chaque lien contient la clé de l'événement. Flashez le QR code avec l'appareil photo de l'iPad, ou poussez le lien des tablettes en Web Clip avec Jamf.</p>
+    <div class="links" id="links"></div>
+  </div>
+
+  <!-- RÉGLAGES ----------------------------------------------------------->
+  <details class="card">
+    <summary>Réglages</summary>
+    <div class="grid2">
+      <label>Titre affiché <input id="cTitre"></label>
+      <label>Longueur d'un tour (km) <input id="cBoucle" inputmode="decimal"></label>
+      <label>Absence avant de compter un nouveau tour (s) <input id="cAbs" inputmode="numeric"></label>
+      <label>Alerte au-delà de (tours) <input id="cPlaf" inputmode="numeric"></label>
+      <label>Ignorer les passages juste après le départ (s) <input id="cDelai" inputmode="numeric"></label>
+    </div>
+    <p class="small muted" style="margin-top:10px">L'absence doit rester nettement plus courte que le tour le plus rapide (60 s pour une boucle de 800 m). Le délai après le départ ne sert que si les tablettes sont placées sur la ligne de départ : sinon laissez 0.</p>
+    <div class="grid2" id="cCourses" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button></div>
+  </details>
+
+  <!-- SECOURS ------------------------------------------------------------>
+  <details class="card">
+    <summary>Secours et export</summary>
+    <p class="muted">Si une tablette n'a pas pu se synchroniser, enregistrez ses passages sur la tablette (⚙ → « Enregistrer mes passages »), puis importez le fichier ici. Un passage déjà connu n'est jamais compté deux fois.</p>
+    <div class="row">
+      <input type="file" id="csvFile" accept=".csv,text/csv" multiple hidden>
+      <button class="btn" id="csvPick">Importer des fichiers de tablettes (CSV)…</button>
+      <button class="btn primary" id="xlsOut">Télécharger tous les résultats (Excel)</button>
+    </div>
+    <div id="csvOut" style="margin-top:10px"></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+    <p class="muted">Avant le jour J, effacez les passages des répétitions. Les participants, les adultes et les réglages sont conservés.</p>
+    <button class="btn danger" id="reset">Effacer tous les passages…</button>
+  </details>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script type="module">
+import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured} from './app.js';
+
+const store=await boot();
+const S={participants:{},scans:{},corrections:{},config:{},devices:{}};
+const now=()=>store.now();
+let noms=getNoms(store.key), res=null, tm=null, audio=null, calls=[], cfgFilled=false, pending=null;
+store.onValue('participants',v=>{S.participants=v; later();});
+store.onValue('corrections',v=>{S.corrections=v; later();});
+store.onValue('config',v=>{S.config=v; later(); fillCfg();});
+store.onValue('devices',v=>{S.devices=v; drawDevices();});
+store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
+store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=store.mode==='local'?'mode local':(c?'en ligne':'hors ligne'); });
+$('sub').textContent='Clé : '+store.key+' · '+(store.mode==='local'?'mode local':'synchronisation Firebase');
+function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; res=compute(S); drawAll(); },500); }
+function drawAll(){ drawCourses(); drawControl(); drawAdults(); drawStats(); drawQ(); fillClasses(); }
+
+// ================================================================= courses
+function drawCourses(){
+  const cfg=res.cfg;
+  $('h1').textContent=cfg.titre||'Organisation du cross';
+  $('courses').innerHTML=Object.entries(cfg.courses).map(([id,c])=>{
+    const cl=res.classes.filter(x=>x.course===id);
+    const tours=cl.reduce((a,x)=>a+x.total,0), run=cl.reduce((a,x)=>a+x.coureurs+x.adultes,0);
+    const etat=!c.debut?'<span class="tag">pas partie</span>':(c.fin?'<span class="tag">terminée</span>':'<span class="tag g">en cours</span>');
+    const chrono=c.debut?`<div class="chrono" data-chrono="${id}">${fmtChrono((c.fin||now())-c.debut)}</div>`:'';
+    const btns=!c.debut?`<button class="btn vest" data-go="${id}">Donner le départ</button>`
+      :(!c.fin?`<button class="btn primary" data-end="${id}">Fin de la course</button>`
+      :`<button class="btn small" data-reopen="${id}">Rouvrir</button>`)
+      +(c.debut?` <button class="btn small danger" data-undo="${id}">Annuler le départ</button>`:'');
+    return `<div class="course"><div><h3>${esc(c.nom)} <span class="muted small">niveaux ${esc(c.niveaux)}</span> ${etat}
+      ${cfg.courant===id?'<span class="tag o">affichée en direct</span>':` <button class="btn small" data-show="${id}">Afficher en direct</button>`}</h3>
+      <div class="muted small">${c.debut?'Départ '+fmtHeure(c.debut)+(c.fin?' · fin '+fmtHeure(c.fin):''):'—'} · ${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km</div></div>
+      <div style="text-align:right">${chrono}<div class="row" style="justify-content:flex-end;margin-top:6px">${btns}</div></div></div>`;
+  }).join('');
+}
+setInterval(()=>{ if(!res) return; document.querySelectorAll('[data-chrono]').forEach(el=>{ const c=res.cfg.courses[el.dataset.chrono]; if(c&&c.debut) el.textContent=fmtChrono((c.fin||now())-c.debut); }); },1000);
+$('courses').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return; const P='config/courses/';
+  if(b.dataset.go){ if(!confirm('Donner le départ de « '+res.cfg.courses[b.dataset.go].nom+' » maintenant ?')) return;
+    store.update({[P+b.dataset.go+'/debut']:now(),[P+b.dataset.go+'/fin']:null,'config/courant':b.dataset.go}); }
+  if(b.dataset.end){ if(confirm('Arrêter le comptage de cette course ? Les passages suivants ne compteront plus.')) store.update({[P+b.dataset.end+'/fin']:now()}); }
+  if(b.dataset.reopen) store.update({[P+b.dataset.reopen+'/fin']:null});
+  if(b.dataset.undo){ if(confirm('Annuler le départ ? Les tours déjà comptés disparaîtront des classements (les passages restent enregistrés).')) store.update({[P+b.dataset.undo+'/debut']:null,[P+b.dataset.undo+'/fin']:null}); }
+  if(b.dataset.show) store.update({'config/courant':b.dataset.show});
+};
+
+// ================================================================= tablettes et appels
+$('sound').onclick=()=>{ try{ audio=new (window.AudioContext||window.webkitAudioContext)(); audio.resume(); ding(); $('sound').textContent='🔔 Alertes sonores actives'; }catch(e){} };
+function ding(){ if(!audio) return; const o=audio.createOscillator(), g=audio.createGain(); o.type='square'; o.frequency.value=880;
+  o.connect(g); g.connect(audio.destination); const t=audio.currentTime; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.5,t+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.35); o.start(t); o.stop(t+.4); }
+setInterval(()=>{ if(calls.length) ding(); },3000);
+function drawDevices(){
+  const D=S.devices||{}, t=now();
+  const list=Object.entries(D).sort((a,b)=>a[0].localeCompare(b[0],'fr',{numeric:true}));
+  calls=list.filter(([n,d])=>d.call&&!(d.ackAt>=d.callAt)).map(([n])=>n);
+  $('callBanner').style.display=calls.length?'block':'none';
+  $('callBanner').innerHTML=calls.length?'Appel de : '+calls.map(esc).join(', ')+' — voir « Tablettes »':'';
+  if(!list.length){ $('devices').innerHTML='<p class="muted">Aucune tablette ne s\'est encore annoncée.</p>'; return; }
+  $('devices').innerHTML='<table class="t"><tr><th>Tablette</th><th>Dernières nouvelles</th><th>Passages</th><th>En attente d\'envoi</th><th>Lecture</th><th></th></tr>'+
+    list.map(([n,d])=>{
+      const age=Math.max(0,Math.round((t-(d.t||0))/1000)), appel=calls.includes(n);
+      const st=age>60?'<span class="tag o">il y a '+fmtDuree(age*1000)+'</span>':'<span class="tag g">il y a '+age+' s</span>';
+      return `<tr class="${appel?'dev-call':''}"><td>${esc(n)}</td><td>${st}</td><td class="num">${d.n||0}</td>
+        <td class="num">${d.p?'<span class="tag o">'+d.p+'</span>':'0'}</td>
+        <td>${d.dec==='zxing'?'normale':'<span class="tag r">dégradée</span>'}</td>
+        <td>${appel?`<button class="btn small vest" data-ack="${esc(n)}">J'arrive</button>`:''}</td></tr>`;
+    }).join('')+'</table>';
+}
+setInterval(drawDevices,5000);
+$('devices').onclick=e=>{ const b=e.target.closest('[data-ack]'); if(b) store.update({['devices/'+b.dataset.ack+'/ackAt']:now()}); };
+
+// ================================================================= contrôle
+function drawControl(){
+  const A=res.A, cfg=res.cfg, blocs=[];
+  const ligne=(L)=>{ const p=L.p; return '<b>'+L.d+'</b> '+esc(nomDe(noms,L)||'')+' <span class="muted">'+esc(p?(p.a?'adulte'+(p.cr?' · '+p.cr:''):p.c):'')+'</span>'; };
+  if(A.manquants.length) blocs.push('<h3 style="margin:10px 0 6px">Tours manquants probables <span class="tag o">'+A.manquants.length+'</span></h3>'+
+    '<p class="small muted">L\'intervalle entre deux passages est nettement plus long que le tour habituel de ce coureur. À valider seulement si c\'est plausible : un élève peut aussi s\'être arrêté.</p><div class="scroll"><table class="t">'+
+    A.manquants.map(m=>`<tr><td>${ligne(m.L)}</td><td class="small">${fmtHeure(m.de)} → ${fmtHeure(m.a)} : ${fmtDuree(m.v)} (tour habituel ${fmtDuree(m.med)})</td>
+      <td style="white-space:nowrap"><button class="btn small" data-acc="${m.key}" data-d="${m.L.d}" data-k="${m.k}">+${m.k} tour${m.k>1?'s':''}</button>
+      <button class="btn small" data-ref="${m.key}" data-d="${m.L.d}">Non</button></td></tr>`).join('')+'</table></div>');
+  if(A.plafond.length) blocs.push('<h3 style="margin:14px 0 6px">Nombre de tours à vérifier <span class="tag r">'+A.plafond.length+'</span></h3><table class="t">'+
+    A.plafond.map(L=>`<tr><td>${ligne(L)}</td><td>${L.tours} tours ${L.tours>cfg.plafond?'<span class="tag r">au-delà du plafond</span>':'<span class="tag o">au plafond</span>'}</td></tr>`).join('')+'</table>');
+  if(A.adultesLibres.length) blocs.push('<h3 style="margin:14px 0 6px">Dossards adultes pas encore attribués <span class="tag o">'+A.adultesLibres.length+'</span></h3><p class="small">'+
+    A.adultesLibres.map(L=>`<button class="btn small" data-adult="${L.d}">${L.d} · ${L.tours} tour${L.tours>1?'s':''}</button>`).join(' ')+'</p>');
+  if(A.inconnus.length) blocs.push('<h3 style="margin:14px 0 6px">Numéros scannés absents de la liste <span class="tag r">'+A.inconnus.length+'</span></h3><p class="small">'+
+    A.inconnus.map(L=>L.d+' ('+L.nScans+' lecture'+(L.nScans>1?'s':'')+')').join(' · ')+'</p>');
+  if(A.dispenses.length) blocs.push('<h3 style="margin:14px 0 6px">Dispensés ou absents qui ont été scannés <span class="tag o">'+A.dispenses.length+'</span></h3><table class="t">'+
+    A.dispenses.map(L=>`<tr><td>${ligne(L)}</td><td>${L.laps.length} passage(s) — noté « ${L.p.st==='dispense'?'dispensé':esc(L.p.st)} »</td><td><button class="btn small" data-st="" data-d="${L.d}">Il a couru : réintégrer</button></td></tr>`).join('')+'</table>');
+  const fin=Object.values(cfg.courses).some(c=>c.fin);
+  if(A.zero.length) blocs.push('<details><summary style="cursor:pointer;margin:14px 0 6px;font-weight:600">Élèves sans aucun tour dans une course partie <span class="tag">'+A.zero.length+'</span></summary>'+
+    '<p class="small muted">'+(fin?'Indiquez « absent » pour ceux qui n\'ont pas couru : ils ne pèseront pas dans les moyennes (ils n\'y pèsent pas non plus sans rien faire, mais la liste s\'en trouve nettoyée).':'Normal en début de course.')+'</p><div class="scroll"><table class="t">'+
+    A.zero.sort((a,b)=>a.p.c.localeCompare(b.p.c)||a.d-b.d).map(L=>`<tr><td>${ligne(L)}</td><td><button class="btn small" data-st="absent" data-d="${L.d}">Absent</button> <button class="btn small" data-st="dispense" data-d="${L.d}">Dispensé</button></td></tr>`).join('')+'</table></div></details>');
+  const corr=Object.entries(S.corrections||{}).filter(([k,c])=>c&&c.delta).sort((a,b)=>b[1].t-a[1].t);
+  if(corr.length) blocs.push('<details><summary style="cursor:pointer;margin:14px 0 6px;font-weight:600">Corrections enregistrées <span class="tag">'+corr.length+'</span></summary><table class="t">'+
+    corr.map(([k,c])=>`<tr><td><b>${c.d}</b></td><td>${c.delta>0?'+':''}${c.delta}</td><td class="small">${esc(c.raison||'')}</td><td class="small muted">${fmtHeure(c.t)}</td><td><button class="btn small danger" data-delc="${k}">Annuler</button></td></tr>`).join('')+'</table></details>');
+  if(res.A.hors) blocs.push(`<p class="small muted" style="margin-top:12px">${res.A.hors} lecture${res.A.hors>1?'s':''} hors des horaires de course (répétitions, échauffement…) : ignorée${res.A.hors>1?'s':''}.</p>`);
+  $('control').innerHTML=blocs.join('')||'<p class="msg o">Rien à signaler.</p>';
+}
+$('control').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.acc) store.update({['corrections/'+b.dataset.acc]:{d:+b.dataset.d,delta:+b.dataset.k,raison:'tour manquant validé',t:now()}});
+  if(b.dataset.ref) store.update({['corrections/'+b.dataset.ref]:{d:+b.dataset.d,delta:0,raison:'tour manquant refusé',t:now()}});
+  if(b.dataset.adult){ $('aD').value=b.dataset.adult; $('aN').focus(); $('aD').scrollIntoView({behavior:'smooth',block:'center'}); }
+  if(b.dataset.st!==undefined&&b.dataset.d) setStatut(+b.dataset.d,b.dataset.st);
+  if(b.dataset.delc&&confirm('Annuler cette correction ?')) store.update({['corrections/'+b.dataset.delc]:null});
+};
+function setStatut(d,st){ store.update({['participants/'+d+'/st']:st||null}); }
+
+// ================================================================= un dossard
+function drawQ(){
+  const d=parseInt($('qD').value,10); if(!d){ $('qOut').innerHTML=''; return; }
+  const L=res.lignes[d];
+  if(!L){ $('qOut').innerHTML='<p class="msg w">Dossard '+d+' inconnu et jamais scanné.</p>'; return; }
+  const p=L.p;
+  const st=p&&p.st?'<span class="tag o">'+(p.st==='dispense'?'dispensé':esc(p.st))+'</span>':'<span class="tag g">participe</span>';
+  const scans=Object.values(S.scans).filter(s=>s.d===d).sort((a,b)=>a.t-b.t);
+  $('qOut').innerHTML=`<div class="row" style="gap:18px;align-items:flex-start">
+    <div class="kpi"><b>${L.tours}</b><span>tours comptés${L.corr?' (dont correction '+(L.corr>0?'+':'')+L.corr+')':''}</span></div>
+    <div><div><b>${d}</b> ${esc(nomDe(noms,L))} ${p?'· '+esc(p.a?'adulte'+(p.cr?' pour '+p.cr:''):p.c+(p.g?' · '+p.g:'')):'<span class="tag r">absent de la liste</span>'} ${p?st:''}</div>
+      <div class="small muted">${scans.length} lecture(s) : ${scans.map(s=>fmtHeure(s.t)+(res.compte.has(s.id)?' ✓':'')).join(' · ')||'aucune'}</div>
+      <div class="small muted">Meilleur tour ${fmtDuree(L.best)||'—'} · tour moyen ${fmtDuree(L.moy)||'—'}</div></div></div>
+    <div class="row" style="margin-top:12px">
+      ${p&&!p.a?`<button class="btn small" data-st2="dispense">Dispensé</button><button class="btn small" data-st2="absent">Absent</button><button class="btn small" data-st2="">Participe</button>`:''}
+      <span class="inline"><input id="cR" placeholder="motif" style="width:200px"><button class="btn small" data-add="1">+1 tour</button><button class="btn small" data-add="-1">−1 tour</button></span>
+    </div>`;
+}
+$('qGo').onclick=drawQ; $('qD').onkeydown=e=>{ if(e.key==='Enter') drawQ(); };
+$('qOut').onclick=e=>{
+  const b=e.target.closest('button'), d=parseInt($('qD').value,10); if(!b||!d) return;
+  if(b.dataset.st2!==undefined) setStatut(d,b.dataset.st2);
+  if(b.dataset.add){ const r=$('cR').value.trim()||'correction manuelle';
+    store.update({['corrections/c_'+uid()]:{d,delta:+b.dataset.add,raison:r,t:now()}}); }
+};
+
+// ================================================================= adultes
+function fillClasses(){
+  const cur=$('aC').value;
+  const cls=[...new Set(Object.values(S.participants).filter(p=>!p.a).map(p=>p.c))].sort();
+  const html='<option value="">Aucune classe (compté à part)</option>'+cls.map(c=>`<option${c===cur?' selected':''}>${esc(c)}</option>`).join('');
+  if($('aC').innerHTML!==html) $('aC').innerHTML=html;
+}
+function drawAdults(){
+  const A=Object.entries(S.participants).filter(([d,p])=>p.a).sort((a,b)=>a[0]-b[0]);
+  $('adults').innerHTML=A.length?'<table class="t"><tr><th>Dossard</th><th>Nom</th><th>Classe créditée</th><th>Tours</th><th></th></tr>'+
+    A.map(([d,p])=>`<tr><td><b>${d}</b></td><td>${esc(p.n||'')}</td><td>${esc(p.cr||'aucune')}</td><td class="num">${res.lignes[d]?res.lignes[d].tours:0}</td>
+      <td><button class="btn small" data-edit="${d}">Modifier</button> <button class="btn small danger" data-del="${d}">Retirer</button></td></tr>`).join('')+'</table>'
+    :'<p class="muted small">Aucun adulte enregistré pour l\'instant.</p>';
+}
+$('aSave').onclick=()=>{
+  const d=parseInt($('aD').value,10);
+  if(!estAdulteNum(d)){ alert('Les dossards adultes vont de 901 à 950.'); return; }
+  const p={a:1}; if($('aC').value) p.cr=$('aC').value; if($('aN').value.trim()) p.n=$('aN').value.trim().slice(0,40);
+  store.update({['participants/'+d]:p}); $('aD').value=''; $('aN').value='';
+};
+$('adults').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.del&&confirm('Retirer l\'adulte '+b.dataset.del+' ? Ses passages redeviendront « non attribués ».')) store.update({['participants/'+b.dataset.del]:null});
+  if(b.dataset.edit){ const p=S.participants[b.dataset.edit]; $('aD').value=b.dataset.edit; $('aC').value=p.cr||''; $('aN').value=p.n||''; }
+};
+
+// ================================================================= participants
+function drawStats(){
+  const P=Object.values(S.participants), el=P.filter(p=>!p.a);
+  const cl=new Set(el.map(p=>p.c)), gr=new Set(el.filter(p=>p.g).map(p=>p.c+'|'+(p.ty||'')+'|'+p.g));
+  const disp=el.filter(p=>p.st).length;
+  $('pStats').textContent=el.length?`${el.length} élèves · ${cl.size} classes · ${gr.size} groupes · ${disp} dispensé(s) ou absent(s) · ${Object.keys(noms).length} noms connus sur cet ordinateur`:'Aucun participant importé.';
+}
+$('xPick').onclick=()=>$('xFile').click();
+$('xFile').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  const wb=XLSX.read(await f.arrayBuffer());
+  const {rows,notes}=parseWorkbook(wb);
+  if(!rows.length){ $('xOut').innerHTML='<p class="msg e">Aucune ligne reconnue. Il faut au moins une colonne « Classe » et une colonne « Nom » ou « Dossard » (voir le modèle).</p>'; return; }
+  const r=prepareImport(rows,readCfg(S.config),S.participants);
+  pending=r;
+  $('xOut').innerHTML=`<p class="small muted">Feuilles lues : ${notes.map(esc).join(' · ')}</p>
+    <p><b>${r.stats.eleves}</b> élèves · <b>${r.stats.classes}</b> classes · <b>${r.stats.groupes}</b> groupes</p>
+    ${r.E.map(x=>'<div class="msg e">'+esc(x)+'</div>').join('')}
+    ${r.W.map(x=>'<div class="msg w">'+esc(x)+'</div>').join('')}
+    ${r.E.length?'<p class="msg e">Corrigez le fichier puis réimportez-le.</p>':
+      `<div class="row" style="margin-top:10px"><button class="btn vest" id="xGo">Publier ces ${r.stats.eleves} élèves</button>
+       <span class="small muted">Remplace la liste actuelle. Les adultes et les statuts « dispensé » sont conservés.</span></div>`}`;
+  const go=$('xGo'); if(go) go.onclick=publish;
+};
+function publish(){
+  if(!pending) return;
+  const adults={}; for(const [d,p] of Object.entries(S.participants)) if(p.a) adults[d]=p;
+  store.set('participants',{...pending.parts,...adults}).then(()=>{
+    noms=pending.noms; setNoms(store.key,noms);
+    $('xOut').innerHTML='<p class="msg o">Liste publiée : '+pending.stats.eleves+' élèves. Les tablettes la reçoivent automatiquement.</p>'; pending=null; later();
+  },err=>{ $('xOut').innerHTML='<p class="msg e">Échec de l\'envoi : '+esc(err.message||err)+'</p>'; });
+}
+$('xTpl').onclick=()=>{
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([['Dossard','Nom','Prénom','Classe','Sexe','Groupe','Type de groupe'],
+    [1,'MARTIN','Léa','601','F','G1','Filles'],[2,'DURAND','Inès','601','F','G1','Filles'],[3,'PETIT','Tom','601','G','G1','Garçons'],[4,'LEROY','Sam','601','G','G3','Mixte']]);
+  ws['!cols']=[{wch:9},{wch:18},{wch:14},{wch:8},{wch:6},{wch:8},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Participants');
+  const aide=XLSX.utils.aoa_to_sheet([['Mode d\'emploi'],[''],
+    ['Une ligne par élève. L\'ordre des colonnes n\'a pas d\'importance, seuls leurs titres comptent.'],
+    ['Dossard : laisser vide pour une numérotation automatique (par niveau, classe, nom). Ne pas utiliser 901 à 950, réservés aux adultes.'],
+    ['Classe : 601, 502, 3PM… Le premier chiffre donne le niveau, donc la course.'],
+    ['Sexe : F ou G.'],
+    ['Groupe : G1, G2… (5 élèves au maximum). Laisser vide si l\'élève n\'a pas de groupe : il compte quand même pour sa classe.'],
+    ['Type de groupe : Filles, Garçons ou Mixte. Indispensable si vous numérotez G1, G2… séparément pour les filles et les garçons d\'une même classe.'],
+    [''],['Les noms et prénoms ne quittent pas l\'ordinateur qui fait l\'import.']]);
+  aide['!cols']=[{wch:120}];
+  XLSX.utils.book_append_sheet(wb,aide,'Mode d\'emploi');
+  XLSX.writeFile(wb,'modele-participants-cross.xlsx');
+};
+
+// ================================================================= liens
+function drawLinks(){
+  const base=location.href.replace(/[^/]*$/,''), k=encodeURIComponent(store.key);
+  const L=[['Tablettes de scan','scan.html'],['Classes en direct (projection)','direct.html'],['Podiums des groupes (fin)','resultats.html'],['Impression des dossards','dossards.html']];
+  $('links').innerHTML=L.map(([t,p])=>{
+    const u=base+p+(store.mode==='firebase'?'?cle='+k:'');
+    let svg=''; try{ const q=qrcode(0,'M'); q.addData(u); q.make(); svg=q.createSvgTag({cellSize:3,margin:2,scalable:true}); }catch(e){}
+    return `<div class="card"><h2 style="font-size:15px">${t}</h2><div class="qr">${svg}</div><p style="margin:8px 0"><code>${esc(u)}</code></p>
+      <div class="row"><a class="btn small" href="${esc(u)}" target="_blank">Ouvrir</a><button class="btn small" data-copy="${esc(u)}">Copier</button></div></div>`;
+  }).join('');
+}
+$('links').onclick=e=>{ const b=e.target.closest('[data-copy]'); if(b) navigator.clipboard.writeText(b.dataset.copy).then(()=>{ b.textContent='Copié'; setTimeout(()=>b.textContent='Copier',1500); }); };
+drawLinks();
+
+// ================================================================= réglages
+function fillCfg(){
+  if(cfgFilled&&document.activeElement&&document.activeElement.closest('details')) return;
+  const c=readCfg(S.config);
+  $('cTitre').value=c.titre; $('cBoucle').value=String(c.boucle).replace('.',','); $('cAbs').value=c.absence; $('cPlaf').value=c.plafond; $('cDelai').value=c.delai;
+  $('cCourses').innerHTML=Object.entries(c.courses).map(([id,x])=>`<div class="card" style="margin:0"><b>Course ${id}</b>
+    <label style="display:block;margin-top:8px">Nom <input data-cn="${id}" value="${esc(x.nom)}" style="width:100%"></label>
+    <label style="display:block;margin-top:8px">Niveaux (ex. 6,5) <input data-cv="${id}" value="${esc(x.niveaux)}" style="width:100%"></label></div>`).join('');
+  cfgFilled=true;
+}
+$('cSave').onclick=()=>{
+  const num=v=>parseFloat(String(v).replace(',','.'));
+  const u={'config/titre':$('cTitre').value.trim()||'Cross du collège','config/boucle':num($('cBoucle').value)||0.8,
+    'config/absence':Math.max(10,parseInt($('cAbs').value,10)||60),'config/plafond':parseInt($('cPlaf').value,10)||15,'config/delai':Math.max(0,parseInt($('cDelai').value,10)||0)};
+  document.querySelectorAll('[data-cn]').forEach(i=>u['config/courses/'+i.dataset.cn+'/nom']=i.value.trim()||'Course '+i.dataset.cn);
+  document.querySelectorAll('[data-cv]').forEach(i=>u['config/courses/'+i.dataset.cv+'/niveaux']=i.value.replace(/\s+/g,''));
+  store.update(u).then(()=>{ $('cSave').textContent='Enregistré ✓'; setTimeout(()=>$('cSave').textContent='Enregistrer les réglages',1500); });
+};
+
+// ================================================================= secours
+$('csvPick').onclick=()=>$('csvFile').click();
+$('csvFile').onchange=async e=>{
+  const files=[...e.target.files]; e.target.value=''; let neuf=0, deja=0, bad=0; const up={};
+  for(const f of files){
+    const lines=(await f.text()).replace(/^﻿/,'').split(/\r?\n/).filter(Boolean);
+    const h=lines.shift().split(';');
+    const ix=k=>h.indexOf(k);
+    for(const l of lines){
+      const c=l.split(';'), id=c[ix('id')], d=parseInt(c[ix('dossard')],10), t=parseInt(c[ix('horodatage_ms')],10);
+      if(!id||!d||!t){ bad++; continue; }
+      if(S.scans[id]){ deja++; continue; }
+      up['scans/'+id]={d,t,v:c[ix('tablette')]||'import',m:c[ix('mode')]||'c'}; neuf++;
+    }
+  }
+  if(neuf) await store.update(up);
+  $('csvOut').innerHTML=`<p class="msg o">${neuf} passage(s) ajouté(s) · ${deja} déjà connu(s)${bad?' · '+bad+' ligne(s) illisible(s)':''}.</p>`;
+};
+$('xlsOut').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
+$('reset').onclick=()=>{
+  const n=Object.keys(S.scans).length;
+  const r=prompt('Effacer les '+n+' passages, les corrections, les horaires de course et la liste des tablettes ?\nLes participants, adultes et réglages sont conservés.\n\nTapez EFFACER pour confirmer.');
+  if(r!=='EFFACER') return;
+  const u={scans:null,corrections:null,devices:null,'config/resetAt':now()};
+  for(const id in readCfg(S.config).courses){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
+  store.update(u).then(()=>location.reload());
+};
+later();
+</script>
+</body>
+</html>

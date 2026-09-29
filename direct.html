@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>En direct — Cross</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
+  .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:100vh}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .ttl .k{font-size:clamp(13px,1.1vw,17px);letter-spacing:.14em;text-transform:uppercase;color:var(--vest);font-weight:700}
+  .ttl h1{font-size:clamp(28px,3.4vw,58px);line-height:1.05;letter-spacing:-.02em}
+  .chrono{font-size:clamp(40px,6vw,104px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:.9}
+  .chrono small{display:block;font-size:clamp(12px,1vw,16px);font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#9AA3AB;text-align:right;margin-top:6px}
+  .stats{display:flex;gap:clamp(18px,3vw,56px);border-top:1px solid #2B333B;border-bottom:1px solid #2B333B;padding:clamp(10px,1.4vh,18px) 0}
+  .stat b{display:block;font-size:clamp(26px,3vw,50px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+  .stat span{font-size:clamp(12px,.95vw,15px);color:#9AA3AB;text-transform:uppercase;letter-spacing:.08em}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:clamp(18px,2.6vw,48px);flex:1}
+  .col h2{font-size:clamp(18px,1.7vw,28px);margin-bottom:clamp(8px,1vh,14px);display:flex;justify-content:space-between;align-items:baseline}
+  .col h2 span{font-size:.6em;color:#9AA3AB;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+  .lane{display:grid;grid-template-columns:clamp(34px,2.6vw,48px) clamp(64px,5.4vw,96px) 1fr clamp(150px,12vw,220px);align-items:center;gap:12px;
+    padding:clamp(5px,.8vh,10px) 0;border-bottom:1px dashed #2B333B}
+  .rk{font-size:clamp(16px,1.4vw,24px);font-weight:800;color:#9AA3AB;font-variant-numeric:tabular-nums}
+  .cl{font-size:clamp(20px,1.9vw,34px);font-weight:800;letter-spacing:-.01em}
+  .bar{height:clamp(14px,1.8vh,24px);background:#20272E;border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;background:#E8ECEF;border-radius:99px;transition:width .9s ease}
+  .val{text-align:right;font-variant-numeric:tabular-nums}
+  .val b{font-size:clamp(20px,1.9vw,34px);font-weight:800}
+  .val small{display:block;font-size:clamp(11px,.85vw,14px);color:#9AA3AB}
+  .lane.first .rk,.lane.first .cl{color:var(--vest)}
+  .lane.first .bar i{background:var(--vest)}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#9AA3AB;font-size:clamp(12px,1vw,16px)}
+  #feed{white-space:nowrap;overflow:hidden;flex:1;font-variant-numeric:tabular-nums}
+  #feed em{font-style:normal;color:#fff;font-weight:700;margin-right:14px}
+  .ghost{background:none;border:1px solid #39424B;color:#9AA3AB;border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+  .empty{color:#9AA3AB;font-size:clamp(16px,1.3vw,22px);padding:20px 0}
+  body.idle{cursor:none}
+</style>
+</head>
+<body>
+<div class="scr">
+  <header>
+    <div class="ttl"><div class="k" id="kicker">En direct</div><h1 id="title">Cross du collège</h1></div>
+    <div class="chrono"><span id="chrono">—</span><small id="chronoLbl">En attente du départ</small></div>
+  </header>
+  <div class="stats">
+    <div class="stat"><b id="sTours">0</b><span>tours bouclés</span></div>
+    <div class="stat"><b id="sKm">0</b><span>kilomètres parcourus</span></div>
+    <div class="stat"><b id="sRun">0</b><span>coureurs en piste</span></div>
+  </div>
+  <div class="cols" id="cols"></div>
+  <div class="foot">
+    <div id="feed"></div>
+    <span id="net" class="pill"><i></i><span>…</span></span>
+    <button class="ghost" id="fs">Plein écran</button>
+  </div>
+</div>
+<script type="module">
+import {$,esc,boot,compute,readCfg,niveauxDe,fmtChrono,fr1} from './app.js';
+
+const store=await boot();
+const S={participants:{},scans:{},corrections:{},config:{}};
+let tm=null;
+const q=new URLSearchParams(location.search);
+store.onValue('participants',v=>{S.participants=v; later();});
+store.onValue('corrections',v=>{S.corrections=v; later();});
+store.onValue('config',v=>{S.config=v; later();});
+store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
+store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
+
+function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; draw(); },700); }
+
+function draw(){
+  const res=compute(S), cfg=res.cfg;
+  const cid=q.get('course')||cfg.courant||'1', co=cfg.courses[cid]||{nom:'Course',niveaux:''};
+  $('title').textContent=cfg.titre||'Cross du collège';
+  $('kicker').textContent='En direct · '+(co.nom||'Course '+cid);
+  const cl=res.classes.filter(c=>c.course===cid);
+  const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
+  $('sTours').textContent=tours.toLocaleString('fr-FR');
+  $('sKm').textContent=fr1(tours*cfg.boucle);
+  $('sRun').textContent=run;
+  const max=Math.max(1,...cl.map(c=>c.moy));
+  const niv=niveauxDe(co);
+  $('cols').innerHTML=niv.map(n=>{
+    const L=cl.filter(c=>c.niv===n);
+    const rows=L.length?L.map((c,i)=>`<div class="lane${i===0&&c.moy>0?' first':''}">
+      <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}</div>
+      <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i></div>
+      <div class="val"><b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`).join('')
+      :'<div class="empty">Aucune classe de ce niveau.</div>';
+    return `<div class="col"><h2><b>${esc(n)}<sup>e</sup></b><span>moyenne de tours par élève</span></h2>${rows}</div>`;
+  }).join('')||'<div class="empty">Aucune course configurée.</div>';
+  // derniers tours réellement comptés (pas les relectures)
+  const feed=Object.values(S.scans).filter(s=>res.compte.has(s.id)).sort((a,b)=>b.t-a.t).slice(0,30)
+    .map(s=>{ const p=S.participants[s.d]; return p?(p.a?(p.cr||'Adulte'):p.c):null; }).filter(Boolean);
+  $('feed').innerHTML=feed.length?'Derniers tours : '+feed.map(x=>'<em>'+esc(x)+'</em>').join(''):'';
+  tick();
+}
+function tick(){
+  const cfg=readCfg(S.config), cid=q.get('course')||cfg.courant||'1', co=cfg.courses[cid]||{};
+  if(!co.debut){ $('chrono').textContent='—'; $('chronoLbl').textContent='En attente du départ'; return; }
+  const fin=co.fin||store.now();
+  $('chrono').textContent=fmtChrono(fin-co.debut);
+  $('chronoLbl').textContent=co.fin?'Course terminée':'Temps de course';
+}
+setInterval(tick,1000);
+draw();
+
+$('fs').onclick=()=>{ const d=document.documentElement; (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); };
+let idle; addEventListener('mousemove',()=>{ document.body.classList.remove('idle'); clearTimeout(idle); idle=setTimeout(()=>document.body.classList.add('idle'),3000); });
+</script>
+</body>
+</html>

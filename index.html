@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cross du collège</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .menu a{display:flex;flex-direction:column;gap:6px;text-decoration:none;background:var(--paper2);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .menu a:hover{border-color:#B7B1A4}
+  .menu b{font-size:18px}
+  .menu span{color:var(--muted);font-size:14px}
+  .menu a.main{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .menu a.main span{color:#B9C0C6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div><h1 id="t">Cross du collège</h1><div class="sub" id="sub"></div></div>
+    <button class="btn small" id="key">Changer de clé</button>
+  </div>
+  <div class="menu">
+    <a class="main" href="scan.html" data-l><b>Tablettes de scan</b><span>Pour les élèves référents, à l'entrée des couloirs.</span></a>
+    <a href="direct.html" data-l><b>Classes en direct</b><span>À projeter pendant la course : moyenne de tours par élève.</span></a>
+    <a href="resultats.html" data-l><b>Podiums des groupes</b><span>À dévoiler à la fin, place par place.</span></a>
+    <a href="admin.html" data-l><b>Organisation</b><span>Départ et fin, tablettes, contrôle, adultes, dispenses, import, export.</span></a>
+    <a href="dossards.html" data-l><b>Impression des dossards</b><span>Deux dossards par feuille A4.</span></a>
+  </div>
+</div>
+<script type="module">
+import {$,boot,askKey,readCfg} from './app.js';
+const store=await boot();
+$('sub').textContent='Clé : '+store.key+' · '+(store.mode==='local'?'mode local':'synchronisé');
+store.onValue('config',c=>{ $('t').textContent=readCfg(c).titre; document.title=readCfg(c).titre; });
+$('key').onclick=()=>askKey('Saisissez la nouvelle clé.');
+</script>
+</body>
+</html>
