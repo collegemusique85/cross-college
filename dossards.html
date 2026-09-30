@@ -13,14 +13,23 @@
   .ctrl .row{margin-top:10px}
   #sheets{display:flex;flex-direction:column;align-items:center;gap:18px;padding:10px 0 40px}
   .sheet{width:190mm;height:270mm;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18);display:grid;grid-template-rows:135mm 135mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
-  .half{position:relative;display:flex;align-items:center;padding:0 4mm 6mm;gap:4mm}
+  /* Dossard : QR 12 cm à gauche (marge blanche comprise), colonne d'informations à droite. Tout en noir et blanc. */
+  .half{position:relative;display:flex;align-items:center;padding:0 3mm 4mm 2mm;gap:3mm;color:#000;font-family:Helvetica,Arial,sans-serif}
   .half + .half{border-top:.3mm dashed #BBB}
   .half svg{width:120mm;height:120mm;flex:none;shape-rendering:crispEdges}
-  .num{flex:1;min-width:0;text-align:center;font:800 38mm/1 Helvetica,Arial,sans-serif;letter-spacing:-.03em;color:#000}
-  .num.l3{font-size:29mm}
+  .info{flex:1;min-width:0;height:124mm;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
+  .info .lg1{height:24mm;width:auto}
+  .info .lg2{width:62mm;max-width:100%;height:auto}
+  .num{font-weight:800;font-size:34mm;line-height:.9;letter-spacing:-.03em}
+  .num.l3{font-size:27mm}
   .num.l4{font-size:21mm}
-  .foot{position:absolute;left:4mm;right:4mm;bottom:3mm;display:flex;justify-content:space-between;font:11pt Helvetica,Arial,sans-serif;color:#333}
-  .foot .pin{color:#999;font-size:8pt}
+  .who{width:100%}
+  .nom{font-weight:800;font-size:7mm;line-height:1.08;text-transform:uppercase;overflow-wrap:anywhere;max-height:15.5mm;overflow:hidden}
+  .prenom{font-size:6mm;line-height:1.15;margin-top:1mm}
+  .classe{display:inline-block;margin-top:2mm;border:.5mm solid #000;border-radius:2mm;padding:.6mm 3mm;font-weight:800;font-size:6.5mm;line-height:1.1}
+  .blank{font-size:4.6mm;text-align:left;width:100%;line-height:2.1}
+  .blank span{display:block;border-bottom:.3mm dotted #000}
+  .pin{position:absolute;left:4mm;bottom:2mm;color:#777;font-size:7pt}
   @media print{
     body{background:#fff}
     .ctrl,.banner{display:none!important}
@@ -43,7 +52,7 @@
       </select></label>
     <label>Ordre
       <select id="ord"><option value="c">Par classe puis nom</option><option value="n">Par numéro</option></select></label>
-    <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="withNames" checked> Imprimer classe et nom en bas</label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="withNames" checked> Imprimer le nom et le prénom</label>
   </div>
   <div class="row">
     <button class="btn vest" id="print">Imprimer</button>
@@ -78,7 +87,7 @@ function qrSvg(d){
 }
 function liste(){
   const v=$('sel').value;
-  if(v==='adultes') return Array.from({length:50},(_,i)=>({d:901+i,bas:'Adulte'}));
+  if(v==='adultes') return Array.from({length:50},(_,i)=>({d:901+i,adulte:true}));
   let L=Object.entries(P).filter(([d,p])=>!p.a).map(([d,p])=>({d:+d,p}));
   if(v.startsWith('co:')) L=L.filter(x=>courseDeClasse(cfg,x.p.c,x.p.s||'')===v.slice(3));
   if(v.startsWith('cl:')) L=L.filter(x=>x.p.c===v.slice(3));
@@ -86,16 +95,29 @@ function liste(){
   const O={'6':0,'5':1,'4':2,'3':3,'2':4,'1':5,'T':6};
   if($('ord').value==='c') L.sort((a,b)=>(a.d>1000)-(b.d>1000)||(a.d>1000&&b.d>1000?a.d-b.d:0)||(O[niveauDe(a.p.c)]??9)-(O[niveauDe(b.p.c)]??9)||a.p.c.localeCompare(b.p.c)||nm(a).localeCompare(nm(b))||a.d-b.d);
   else L.sort((a,b)=>a.d-b.d);
-  return L.map(x=>{ const n=noms[x.d]; return {d:x.d,bas:x.p.c+(n?' · '+(n.prenom||'')+' '+(n.nom||''):'')}; });
+  return L.map(x=>{ const n=noms[x.d]; return {d:x.d,c:x.p.c,nom:n&&n.nom||'',prenom:n&&n.prenom||''}; });
 }
 function draw(){
   const L=liste(), wn=$('withNames').checked;
-  const half=x=>x?`<div class="half">${qrSvg(x.d)}<div class="num${String(x.d).length>3?' l4':String(x.d).length>2?' l3':''}">${x.d}</div>
-    <div class="foot"><span>${wn?esc(x.bas):''}</span><span class="pin">épingler aux 4 coins</span></div></div>`:'<div class="half"></div>';
+  const who=x=>x.adulte?`<div class="blank"><span>Nom :</span><span>Classe :</span></div>`
+    :`<div class="who">${wn&&x.nom?'<div class="nom">'+esc(x.nom)+'</div>':''}${wn&&x.prenom?'<div class="prenom">'+esc(x.prenom)+'</div>':''}<div class="classe">${esc(x.c)}</div></div>`;
+  const half=x=>x?`<div class="half">${qrSvg(x.d)}<div class="info">
+      <img class="lg1" src="logos/saint-gab.png" alt="Saint Gab'">
+      <div class="num${String(x.d).length>3?' l4':String(x.d).length>2?' l3':''}">${x.d}</div>
+      ${who(x)}
+      <img class="lg2" src="logos/association.png" alt="Association">
+    </div><span class="pin">épingler aux 4 coins</span></div>`:'<div class="half"></div>';
   let h='';
   for(let i=0;i<L.length;i+=2) h+=`<div class="sheet">${half(L[i])}${half(L[i+1])}</div>`;
   $('sheets').innerHTML=h||'<p class="muted">Aucun participant : importez d\'abord la liste dans la page Organisation.</p>';
   $('info').textContent=L.length?L.length+' dossards · '+Math.ceil(L.length/2)+' feuilles':'';
+  ajusterNoms();
+}
+// Les noms longs sont réduits jusqu'à tenir sur deux lignes.
+function ajusterNoms(){
+  document.querySelectorAll('.nom').forEach(el=>{ let f=7;
+    el.style.fontSize=f+'mm';
+    while(f>3.6&&(el.scrollHeight>el.clientHeight+1||el.scrollWidth>el.clientWidth+1)){ f-=.3; el.style.fontSize=f+'mm'; } });
 }
 $('sel').onchange=draw; $('ord').onchange=draw; $('withNames').onchange=draw;
 $('print').onclick=()=>window.print();
