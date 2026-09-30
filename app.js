@@ -130,6 +130,7 @@ export const DEFAULT_CFG = {
   delai:0,         // s : passages ignorés juste après le départ
   courant:'1',
   courses:{
+    '0':{nom:'Lycée',niveaux:'2,1,T',type:'arrivee',duree:0,debut:null,fin:null},
     '1':{nom:'Course 1',niveaux:'6,5',type:'tours',duree:45,debut:null,fin:null},
     '2':{nom:'Course 2',niveaux:'4,3',type:'tours',duree:45,debut:null,fin:null}
   }
@@ -173,6 +174,8 @@ export function niveauxPresents(cfg,id,classes){
   return vus.sort((a,b)=>rang(a)-rang(b)||a.localeCompare(b));
 }
 export const estArrivee = c => c && c.type==='arrivee';
+// Élève du lycée (course « classement à l'arrivée ») : dossards à partir de 1001.
+export function estLyceeClasse(cfg,classe){ const id=courseDeClasse(cfg,classe); return !!(id&&estArrivee(cfg.courses[id])); }
 export const estAdulteNum = d => d>=901 && d<=950;
 export const TYPES = {F:'Filles',G:'Garçons',M:'Mixte'};
 
@@ -233,8 +236,10 @@ export function compute(state){
     if(!p.a){ const o=classe(p.c); o.inscrits++; if(L.tours>0){ o.coureurs++; o.te+=L.tours; } }
     else if(p.cr){ const o=classe(p.cr); o.ta+=L.tours; if(L.tours>0) o.adultes++; }
   }
+  // Moyenne = tours des élèves ÷ élèves ayant couru. Les tours des adultes comptent dans le total
+  // (et les km) de la classe, mais pas dans sa moyenne : un adulte qui fait peu de tours ne la pénalise pas.
   const classes=Object.values(cls).map(o=>({...o,total:o.te+o.ta,
-    moy:o.coureurs?(o.te+o.ta)/o.coureurs:0, km:(o.te+o.ta)*cfg.boucle}))
+    moy:o.coureurs?o.te/o.coureurs:0, km:(o.te+o.ta)*cfg.boucle}))
     .sort((a,b)=>b.moy-a.moy||b.total-a.total||a.c.localeCompare(b.c));
 
   // groupes : moyenne des tours des membres ayant au moins 1 tour
@@ -376,22 +381,31 @@ export function parseWorkbook(wb){
 
 // Transforme les lignes lues en participants, avec toutes les vérifications.
 export function prepareImport(rows,cfg,existing){
-  const E=[], W=[], parts={}, noms={};
-  const ordre={'6':0,'5':1,'4':2,'3':3};
+  const E=[], W=[], parts={}, noms={}, keep={};
+  const ordre={'6':0,'5':1,'4':2,'3':3,'2':4,'1':5,'T':6};
+  // Collège et lycée s'importent ensemble ou séparément : un fichier qui ne contient que
+  // des classes du lycée ne remplace que le lycée, et inversement.
+  const lyc=c=>estLyceeClasse(cfg,c);
+  const aL=rows.some(r=>lyc(r.classe)), aC=rows.some(r=>r.classe&&!lyc(r.classe));
+  const pris={};
+  for(const [d,p] of Object.entries(existing||{})) if(p&&!p.a&&(lyc(p.c)?!aL:!aC)){ keep[d]=p; pris[d]='liste déjà publiée'; }
+  const nk=Object.keys(keep).length;
+  if(nk) W.push(nk+' élève'+(nk>1?'s':'')+' '+(aL?'du collège':'du lycée')+' déjà publié'+(nk>1?'s':'')+' : conservé'+(nk>1?'s':'')+' tel'+(nk>1?'s':'')+' quel'+(nk>1?'s':'')+'.');
   const sans=rows.filter(r=>!String(r.dossard).trim());
-  let max=0;
-  for(const r of rows){ const n=parseInt(r.dossard,10); if(n>0&&n<901) max=Math.max(max,n); }
+  let maxC=0, maxL=1000;
+  for(const d of [...rows.map(r=>parseInt(r.dossard,10)),...Object.keys(keep).map(Number)]){
+    if(d>0&&d<901) maxC=Math.max(maxC,d); if(d>1000) maxL=Math.max(maxL,d); }
   if(sans.length){
     sans.sort((a,b)=>(ordre[niveauDe(a.classe)]??9)-(ordre[niveauDe(b.classe)]??9)
       ||a.classe.localeCompare(b.classe)||a.nom.localeCompare(b.nom)||a.prenom.localeCompare(b.prenom));
-    for(const r of sans){ r.dossard=String(++max); r.auto=true; }
-    W.push(sans.length+' dossard'+(sans.length>1?'s':'')+' numéroté'+(sans.length>1?'s':'')+' automatiquement (colonne vide).');
-    if(max>900) E.push('La numérotation automatique dépasse 900 : elle empiète sur les dossards réservés aux adultes (901 à 950).');
+    for(const r of sans){ r.dossard=String(lyc(r.classe)?++maxL:++maxC); r.auto=true; }
+    W.push(sans.length+' dossard'+(sans.length>1?'s':'')+' numéroté'+(sans.length>1?'s':'')+' automatiquement (colonne vide)'+(aL?' ; lycée à partir de 1001':'')+'.');
+    if(maxC>900) E.push('La numérotation automatique du collège dépasse 900 : elle empiète sur les dossards réservés aux adultes (901 à 950).');
   }
-  const vus={};
+  const vus={...pris};
   for(const r of rows){
     const d=parseInt(r.dossard,10), ou=r.feuille+' ligne '+r.ligne;
-    if(!(d>=1&&d<=999)||String(d)!==String(r.dossard).trim()){ E.push(ou+' : dossard « '+r.dossard+' » invalide.'); continue; }
+    if(!(d>=1&&d<=9999)||String(d)!==String(r.dossard).trim()){ E.push(ou+' : dossard « '+r.dossard+' » invalide.'); continue; }
     if(estAdulteNum(d)){ E.push(ou+' : le dossard '+d+' est réservé aux adultes (901 à 950).'); continue; }
     if(vus[d]){ E.push('Dossard '+d+' en double ('+vus[d]+' et '+ou+').'); continue; }
     vus[d]=ou;
@@ -405,10 +419,12 @@ export function prepareImport(rows,cfg,existing){
     parts[d]=p;
     noms[d]={nom:r.nom,prenom:r.prenom};
   }
-  const sansSexe=Object.values(parts).filter(p=>!p.s).length;
+  const sansSexeL=Object.values(parts).filter(p=>!p.s&&lyc(p.c)).length;
+  if(sansSexeL) W.push(sansSexeL+' lycéen'+(sansSexeL>1?'s':'')+' sans sexe renseigné : ils ne figureront qu\'au classement général, pas chez les filles ni les garçons.');
+  const sansSexe=Object.values(parts).filter(p=>!p.s&&!lyc(p.c)).length;
   if(sansSexe) W.push(sansSexe+' élève'+(sansSexe>1?'s':'')+' sans sexe renseigné : les groupes concernés seront classés « mixtes ».');
   const sansGrp={};
-  for(const d in parts) if(!parts[d].g) sansGrp[parts[d].c]=(sansGrp[parts[d].c]||0)+1;
+  for(const d in parts) if(!parts[d].g&&!lyc(parts[d].c)) sansGrp[parts[d].c]=(sansGrp[parts[d].c]||0)+1;
   const nsg=Object.values(sansGrp).reduce((a,b)=>a+b,0);
   if(nsg&&Object.values(cfg.courses).some(c=>!estArrivee(c))) W.push(nsg+' élève'+(nsg>1?'s':'')+' sans groupe ('+Object.entries(sansGrp).map(([c,n])=>c+' : '+n).join(', ')+'). Ils comptent pour leur classe, pas pour un podium de groupe.');
   const grp={};
@@ -424,7 +440,7 @@ export function prepareImport(rows,cfg,existing){
   const horsCourse=[...new Set(Object.values(parts).map(p=>p.c).filter(c=>!courseDeClasse(cfg,c)))];
   if(horsCourse.length) W.push('Classes rattachées à aucune course : '+horsCourse.join(', ')+'. Vérifiez les niveaux des courses.');
   const nCl=new Set(Object.values(parts).map(p=>p.c)).size;
-  return {parts,noms,E,W,stats:{eleves:Object.keys(parts).length,classes:nCl,groupes:Object.keys(grp).length}};
+  return {parts,noms,keep,E,W,stats:{eleves:Object.keys(parts).length,classes:nCl,groupes:Object.keys(grp).length,lycee:aL,college:aC}};
 }
 
 // ---------------------------------------------------------------- classements individuels
@@ -437,10 +453,38 @@ export function rangsIndiv(L){ let r=0,prev=null; return L.map((x,i)=>{ const k=
   if(k!==prev){ r=i+1; prev=k; } return r; }); }
 export const mmss = ms => ms==null?'':fmtChrono(ms);
 
+// ---------------------------------------------------------------- lycée : classements à l'arrivée
+export const NIV_LYCEE={'2':'2de','1':'1re','T':'Tle'};
+export const libNivLycee = n => NIV_LYCEE[n]||n;
+// Rangs général, par sexe, par niveau et sexe, par classe et sexe (ordre des premiers passages).
+export function classementLycee(res,id){
+  const A=(res.arrivees[id]||{arrives:[],inscrits:0}).arrives, cpt={};
+  const inc=k=>cpt[k]=(cpt[k]||0)+1;
+  return A.map((x,i)=>{ const s=x.p.s||'?', n=niveauDe(x.p.c);
+    return {...x,niv:n,rang:i+1,rangSexe:x.p.s?inc('s'+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
+}
+export function statsLycee(L){
+  const st=T=>{ const t=T.map(x=>x.temps).filter(v=>v!=null); return {n:T.length,best:t.length?Math.min(...t):null,moy:t.length?t.reduce((a,b)=>a+b,0)/t.length:null}; };
+  return {F:st(L.filter(x=>x.p.s==='F')),G:st(L.filter(x=>x.p.s==='G')),T:st(L)};
+}
+export function exportLyceeCSV(res,noms,id){
+  const cfg=res.cfg, L=classementLycee(res,id), vu=new Set(L.map(x=>x.d));
+  const q=v=>{ v=v==null?'':String(v); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lig=[['Rang général','Rang filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
+  for(const x of L){ const n=noms[x.d]||{};
+    lig.push([x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
+  const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&courseDe(cfg,x.p)===id&&!vu.has(x.d))
+    .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
+  for(const x of autres){ const n=noms[x.d]||{};
+    lig.push(['','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauDe(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
+  const d=new Date();
+  download('cross-lycee-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.csv',lig.map(r=>r.map(q).join(';')).join('\r\n'));
+}
+
 // ---------------------------------------------------------------- export par classe (pour les collègues d'EPS)
 export function exportParClasse(res,noms){
   const cfg=res.cfg, wb=XLSX.utils.book_new();
-  const El=Object.values(res.lignes).filter(x=>x.p&&!x.p.a);
+  const El=Object.values(res.lignes).filter(x=>x.p&&!x.p.a&&!estLyceeClasse(cfg,x.p.c));   // le lycée a son export CSV
   const cls=[...new Set(El.map(x=>x.p.c))].sort((a,b)=>'6543'.indexOf(niveauDe(a))-'6543'.indexOf(niveauDe(b))||a.localeCompare(b,'fr',{numeric:true}));
   const rangCl={}; for(const id in cfg.courses) for(const n of niveauxPresents(cfg,id,res.classes))
     res.classes.filter(c=>c.course===id&&c.niv===n).forEach((c,i,arr)=>rangCl[c.c]=(i+1)+' / '+arr.length);

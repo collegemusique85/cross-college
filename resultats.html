@@ -71,6 +71,7 @@
       <input type="file" id="nameFile" accept=".xlsx,.xls,.csv" hidden>
       <button class="ghost" id="xls">Tous les résultats (Excel)</button>
       <button class="ghost" id="xlsCl">Résultats par classe, pour l'EPS (Excel)</button>
+      <button class="ghost" id="csvLy" hidden>Résultats du lycée (CSV)</button>
     </div>
     <span id="net" class="pill"><i></i><span>…</span></span>
   </div>
@@ -78,7 +79,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,trierIndiv,rangsIndiv,LS,navBar} from './app.js';
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,classementLycee,statsLycee,libNivLycee,trierIndiv,rangsIndiv,LS,navBar} from './app.js';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -104,18 +105,23 @@ const kLab=n=>/^\d$/.test(n)?n+'e':n;
 function sections(){
   const cfg=res.cfg, niv=[], comb=[], lyc=[];
   for(const id in cfg.courses){ const co=cfg.courses[id];
-    if(estArrivee(co)){ lyc.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Lycée')}); continue; }
+    if(estArrivee(co)){ lyc.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Lycée')});
+      const N=[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&courseDe(cfg,p)===id).map(p=>niveauDe(p.c)))]
+        .sort((a,b)=>'21T'.indexOf(a)-'21T'.indexOf(b));
+      for(const n of N) lyc.push({k:'a:'+id+':'+n,id,arr:true,sexe:co.sexe||'',nivL:n,lab:esc(libNivLycee(n))});
+      continue; }
     const N=[...new Set([...niveauxDe(co).filter(n=>n!=='*').map(n=>n.toUpperCase()[0]),...niveauxPresents(cfg,id,res.classes)])];
     for(const n of N) niv.push({k:'n:'+id+':'+n,ids:[id],niv:[n],lab:libNiveau(n)});
     if(N.length>1) comb.push({k:'c:'+id,ids:[id],niv:N,comb:true,lab:N.map(kLab).join('-')});
   }
   if(!lyc.length) lyc.push({k:'lycee',vide:true,lab:'Lycée'});
-  if(lyc.length===1&&!lyc[0].vide) lyc[0].lab='Lycée';
+  if(lyc.filter(x=>!x.nivL).length===1&&!lyc[0].vide) lyc[0].lab='Lycée';
   return [...niv,...comb,...lyc];
 }
 const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A)
   :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
-const dansSec=(sec,p)=>p&&!p.a&&sec.ids.includes(courseDe(res.cfg,p))&&sec.niv.includes(niveauDe(p.c));
+const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id&&(!sec.nivL||niveauDe(p.c)===sec.nivL)
+  :sec.ids.includes(courseDe(res.cfg,p))&&sec.niv.includes(niveauDe(p.c)));
 const mm=ms=>ms==null?'—':fmtChrono(ms);
 const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
 
@@ -123,18 +129,22 @@ const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
 function liste(sec){
   const cfg=res.cfg, cat=st.cat, fcl=st.cl;
   if(sec.arr){
-    const A=(res.arrivees[sec.id]||{arrives:[]}).arrives;
+    // ordre d'arrivée ; le rang est recalculé dans la sélection (niveau, classe, sexe)
+    const A=classementLycee(res,sec.id).filter(x=>dansSec(sec,x.p));
     let L=cat==='S'?A:A.filter(x=>x.p.s===cat); if(fcl) L=L.filter(x=>x.p.c===fcl);
-    return {cols:['Rang','Coureur','Temps','Classe'],rows:L.map(x=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
-      rang:cat==='S'?x.rang:x.rangSexe,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d]}))};
+    const S2=statsLycee(A.filter(x=>!fcl||x.p.c===fcl)), ins=Object.values(res.lignes).filter(x=>dansSec(sec,x.p)&&!x.p.st&&(!fcl||x.p.c===fcl)).length;
+    const f=(k,l)=>S2[k].n?l+' : '+S2[k].n+' arrivé'+(k==='F'?'e':'')+'s · meilleur temps '+fmtChrono(S2[k].best)+' · temps moyen '+fmtChrono(S2[k].moy):'';
+    const note=[f('F','Filles'),f('G','Garçons'),(ins-A.filter(x=>!fcl||x.p.c===fcl).length>0?(ins-A.filter(x=>!fcl||x.p.c===fcl).length)+' pas encore arrivé(s)':'')].filter(Boolean).join('  —  ');
+    return {cols:['Rang','Coureur','Temps','Classe','Rang général'],note,rows:L.map((x,i)=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
+      rang:i+1,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d,x.rang]}))};
   }
   const pr=sec.ids.map(id=>res.profs[id]).find(p=>p&&p.n), pm=pr?pr.moy:0;
   if(cat==='C'){
     const L=res.classes.filter(c=>sec.ids.includes(c.course)&&sec.niv.includes(c.niv)&&c.total>0);
     const R=rangsMoy(L);
-    const rows=L.map((c,i)=>({lab:c.c,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),
+    const rows=L.map((c,i)=>({lab:c.c,sub:c.te+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · + '+c.ta+' tours d\'adultes (hors moyenne)':''),
       score:fr1(c.moy)+' tours',rang:R[i],beat:pm>0&&c.moy>pm,m:c.moy,
-      cells:[c.c+(sec.niv.length>1?' ('+kLab(c.niv)+')':''),fr1(c.moy),c.coureurs+' / '+c.inscrits,c.total+' tours'+(c.ta?' dont '+c.ta+' d\'adultes':'')]}));
+      cells:[c.c+(sec.niv.length>1?' ('+kLab(c.niv)+')':''),fr1(c.moy),c.coureurs+' / '+c.inscrits,c.te+' tours élèves'+(c.ta?' + '+c.ta+' tours d\'adultes = '+c.total:'')]}));
     if(pr){ const at=rows.findIndex(r=>r.m<pr.moy);
       rows.splice(at<0?rows.length:at,0,{profs:true,cells:['Les profs (défi)',fr1(pr.moy),pr.n+' adulte'+(pr.n>1?'s':''),pr.total+' tours — hors classement']}); }
     return {cols:['Rang','Classe','Moyenne','Élèves ayant couru','Tours'],rows,podium:rows.filter(r=>!r.profs)};
@@ -183,11 +193,12 @@ function draw(){
   $('secs').innerHTML=SE.map(x=>`<button class="chip${x.k===st.sec?' on':''}" data-s="${esc(x.k)}">${x.lab}</button>`).join('');
   $('cats').innerHTML=CATS.map(([k,l,g])=>`<button class="chip${g?' grp':''}${k===st.cat?' on':''}" data-c="${k}">${l}</button>`).join('');
   // filtre classe : utile pour les groupes et les élèves
-  const cls=sec&&!sec.vide?[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id:dansSec(sec,p))).map(p=>p.c))]
+  const cls=sec&&!sec.vide?[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&dansSec(sec,p)).map(p=>p.c))]
     .sort((a,b)=>a.localeCompare(b,'fr',{numeric:true})):[];
   if(st.cl&&!cls.includes(st.cl)) st.cl='';
   $('clSel').innerHTML='<option value="">Toutes</option>'+cls.map(c=>`<option${c===st.cl?' selected':''}>${esc(c)}</option>`).join('');
   $('clW').hidden=!sec||sec.vide||['C','AD'].includes(st.cat);
+  $('csvLy').hidden=!(sec&&sec.arr); $('xlsCl').hidden=!!(sec&&(sec.arr||sec.vide));
   if(!sec||sec.vide){ $('kicker').textContent='Lycée'; $('catTitle').innerHTML='Le lycée n\'est pas encore configuré <span>— Organisation › Réglages</span>';
     $('podium').innerHTML=''; $('table').innerHTML=''; $('note').textContent=''; save(); return; }
   const catLab=CATS.find(c=>c[0]===st.cat)[1];
@@ -219,6 +230,7 @@ $('nameFile').onchange=async e=>{
 };
 $('xls').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
 $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
+$('csvLy').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeCSV(res,noms,sec.id); };
 </script>
 </body>
 </html>

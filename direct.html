@@ -214,7 +214,7 @@ function drawTours(res,cfg,cid,co){
     return `<div class="lane${i===0&&c.moy>0?' first':''}${bat?' beat':''}">
       <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}${VUE==='all'?'<span class="nv">'+libNiveau(c.niv)+'</span>':''}</div>
       <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i>${goal}</div>
-      <div class="val">${bat?'<span class="star">★ bat les profs</span> ':''}<b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`; };
+      <div class="val">${bat?'<span class="star">★ bat les profs</span> ':''}<b>${fr1(c.moy)}</b><small>${c.te} tours${c.ta?' + '+c.ta+' adulte'+(c.ta>1?'s':''):''} · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`; };
   let niv=niveauxPresents(cfg,cid,res.classes);
   if(!niv.length) niv=niveauxDe(co).filter(n=>n!=='*');
   document.body.classList.toggle('compact',VUE==='all'&&cl.length>6);
