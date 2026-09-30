@@ -19,7 +19,9 @@
   .half svg{width:120mm;height:120mm;flex:none;shape-rendering:crispEdges}
   .info{flex:1;min-width:0;height:124mm;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
   .info .lg1{height:24mm;width:auto}
-  .info .lg2{width:62mm;max-width:100%;height:auto}
+  /* hauteur fixe comme le logo du haut : Safari réduisait à zéro une image « height:auto » dans cette colonne */
+  .info .lg2{height:21mm;width:auto;max-width:100%;object-fit:contain;flex:none}
+  .info .lg1{flex:none}
   .num{font-weight:800;font-size:34mm;line-height:.9;letter-spacing:-.03em}
   .num.l3{font-size:27mm}
   .num.l4{font-size:21mm}
