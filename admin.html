@@ -130,6 +130,7 @@
       <button class="btn primary" id="xlsOut">Télécharger tous les résultats (Excel)</button>
       <button class="btn" id="xlsCl">Résultats par classe, pour les collègues d'EPS (Excel)</button>
       <button class="btn" id="csvLy">Résultats du lycée (CSV)</button>
+      <button class="btn" id="xlsLyCl">Lycée par classe (Excel)</button>
     </div>
     <div id="csvOut" style="margin-top:10px"></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
@@ -148,7 +149,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,estArrivee,LS} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS} from './app.js';
 
 navBar('admin.html');
 const store=await boot();
@@ -424,7 +425,7 @@ $('cAdd').onclick=()=>{ const ids=Object.keys({...readCfg({}).courses,...(S.conf
   const id=String(Math.max(0,...ids)+1);
   store.update({['config/courses/'+id]:{nom:'Course '+id,niveaux:'',type:'tours'}}).then(()=>{ cfgFilled=false; fillCfg(); }); };
 const PRESETS={
-  journee:{titre:'Cross Saint-Gabriel',courses:{'0':{nom:'Lycée',niveaux:'2,1,T',type:'arrivee',duree:0},'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours',duree:45},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours',duree:45}}}
+  journee:{titre:'Cross Saint-Gabriel',courses:{'0':{nom:'Lycée',niveaux:'2,1,T,CAP,3PM',type:'arrivee',duree:0},'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours',duree:45},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours',duree:45}}}
 };
 document.querySelector('details.card').addEventListener('click',e=>{ const b=e.target.closest('[data-preset]'); if(!b) return;
   const cur=readCfg(S.config);
@@ -468,6 +469,8 @@ $('csvFile').onchange=async e=>{
 };
 $('xlsOut').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
 $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
+$('xlsLyCl').onclick=()=>{ if(!res) return; const id=Object.keys(res.cfg.courses).find(i=>estArrivee(res.cfg.courses[i]));
+  if(id) exportLyceeParClasse(res,noms,id); else alert('Aucune course du lycée dans les réglages.'); };
 $('csvLy').onclick=()=>{ if(!res) return; const id=Object.keys(res.cfg.courses).find(i=>estArrivee(res.cfg.courses[i]));
   if(id) exportLyceeCSV(res,noms,id); else alert('Aucune course du lycée dans les réglages.'); };
 $('reset').onclick=()=>{

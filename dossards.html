@@ -84,7 +84,7 @@ function liste(){
   if(v.startsWith('cl:')) L=L.filter(x=>x.p.c===v.slice(3));
   const nm=x=>noms[x.d]?((noms[x.d].nom||'')+' '+(noms[x.d].prenom||'')):'';
   const O={'6':0,'5':1,'4':2,'3':3,'2':4,'1':5,'T':6};
-  if($('ord').value==='c') L.sort((a,b)=>(O[niveauDe(a.p.c)]??9)-(O[niveauDe(b.p.c)]??9)||a.p.c.localeCompare(b.p.c)||nm(a).localeCompare(nm(b))||a.d-b.d);
+  if($('ord').value==='c') L.sort((a,b)=>(a.d>1000)-(b.d>1000)||(a.d>1000&&b.d>1000?a.d-b.d:0)||(O[niveauDe(a.p.c)]??9)-(O[niveauDe(b.p.c)]??9)||a.p.c.localeCompare(b.p.c)||nm(a).localeCompare(nm(b))||a.d-b.d);
   else L.sort((a,b)=>a.d-b.d);
   return L.map(x=>{ const n=noms[x.d]; return {d:x.d,bas:x.p.c+(n?' · '+(n.prenom||'')+' '+(n.nom||''):'')}; });
 }
