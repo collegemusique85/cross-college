@@ -45,6 +45,15 @@
   <h1 style="font-size:22px">Impression des dossards</h1>
   <p class="muted">Deux dossards par feuille A4, QR code de 12 cm. <b>Imprimer à l'échelle 100 %</b> (jamais « ajuster à la page »), sur papier ou carton mat, sans plastification.
     Avec Safari : dans la fenêtre d'impression, décochez « Imprimer les en-têtes et bas de page ». Vérifiez que le nombre de pages annoncé correspond au nombre de feuilles indiqué ci-dessous.</p>
+  <div class="card" style="margin:14px 0 4px">
+    <div class="row" style="margin-top:0">
+      <input type="file" id="xFile" accept=".xlsx,.xls,.csv" hidden>
+      <button class="btn primary" id="xPick">Importer le fichier Excel des élèves…</button>
+      <span class="muted small" id="nomsInfo"></span>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">Les noms ne sont jamais envoyés en ligne : ils restent sur cet ordinateur. Si la liste est déjà publiée, l'import charge seulement les noms pour l'impression ; sinon il la publie, comme dans Organisation.</p>
+    <div id="xOut" style="margin-top:8px"></div>
+  </div>
   <div class="row">
     <label>Quels dossards
       <select id="sel">
@@ -61,11 +70,12 @@
 </div>
 <div id="sheets"></div>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,getNoms,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar} from './app.js';
+import {$,esc,boot,getNoms,setNoms,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js';
 navBar('dossards.html');
 const store=await boot();
-const noms=getNoms(store.key);
+let noms=getNoms(store.key);
 let P={}, cfg=readCfg({});
 store.onValue('participants',v=>{ P=v||{}; options(); draw(); });
 store.onValue('config',v=>{ cfg=readCfg(v); options(); });
@@ -119,6 +129,37 @@ function ajusterNoms(){
     el.style.fontSize=f+'mm';
     while(f>3.6&&(el.scrollHeight>el.clientHeight+1||el.scrollWidth>el.clientWidth+1)){ f-=.3; el.style.fontSize=f+'mm'; } });
 }
+// ------------------------------------------------------------ import du fichier Excel
+function nomsInfo(){ const n=Object.keys(noms).length; $('nomsInfo').textContent=n?n+' noms connus sur cet ordinateur':'Aucun nom sur cet ordinateur : les dossards sortiront sans nom.'; }
+nomsInfo();
+$('xPick').onclick=()=>$('xFile').click();
+$('xFile').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  const {rows,notes}=parseWorkbook(XLSX.read(await f.arrayBuffer()));
+  if(!rows.length){ $('xOut').innerHTML='<p class="msg e">Aucune ligne reconnue : il faut au moins les colonnes « Classe » et « Nom ».</p>'; return; }
+  const r=prepareImport(rows,cfg,P);
+  if(r.E.length){ $('xOut').innerHTML=r.E.map(x=>'<div class="msg e">'+esc(x)+'</div>').join('')+'<p class="msg e">Corrigez le fichier puis réimportez-le.</p>'; return; }
+  // La liste en ligne correspond-elle déjà à ce fichier (mêmes numéros, classes et sexes) ?
+  const ids=Object.keys(r.parts), deja=ids.length&&ids.every(d=>P[d]&&!P[d].a&&P[d].c===r.parts[d].c&&(P[d].s||'')===(r.parts[d].s||''));
+  if(deja){
+    noms={...noms,...r.noms}; setNoms(store.key,noms); nomsInfo(); draw();
+    $('xOut').innerHTML='<p class="msg o">'+ids.length+' noms chargés pour l\'impression. La liste en ligne était déjà à jour : rien n\'a été republié.</p>';
+    return;
+  }
+  const P0=Object.values(P).filter(p=>p&&!p.a).length;
+  $('xOut').innerHTML=`<p class="small muted">Feuilles lues : ${notes.map(esc).join(' · ')}</p>
+    ${r.W.map(x=>'<div class="msg w">'+esc(x)+'</div>').join('')}
+    <div class="msg w">${P0?'Ce fichier ne correspond pas à la liste déjà publiée : le publier remplacera ':'Aucune liste publiée : le publier enverra '}${r.stats.eleves} élèves (numéros, classes, sexes ; jamais les noms).</div>
+    <div class="row" style="margin-top:8px"><button class="btn vest" id="xGo">Publier ces ${r.stats.eleves} élèves et charger les noms</button></div>`;
+  $('xGo').onclick=()=>{
+    const adults={}; for(const [d,p] of Object.entries(P)) if(p&&p.a) adults[d]=p;
+    const garde={}; for(const d in r.keep) if(noms[d]) garde[d]=noms[d];
+    store.set('participants',{...r.keep,...r.parts,...adults}).then(()=>{
+      noms={...garde,...r.noms}; setNoms(store.key,noms); nomsInfo();
+      $('xOut').innerHTML='<p class="msg o">Liste publiée ('+r.stats.eleves+' élèves) et noms chargés sur cet ordinateur.</p>';
+    },err=>{ $('xOut').innerHTML='<p class="msg e">Échec de l\'envoi : '+esc(err.message||err)+'</p>'; });
+  };
+};
 $('sel').onchange=draw; $('ord').onchange=draw; $('withNames').onchange=draw;
 $('print').onclick=()=>window.print();
 </script>
