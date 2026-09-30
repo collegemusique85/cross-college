@@ -8,7 +8,9 @@
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
-  .ctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;transition:opacity .6s}
+  /* barre de commandes flottante : ne prend pas de place à l'écran, disparaît quand la souris ne bouge plus */
+  .ctl{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);z-index:15;display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;
+    background:#161C21F2;border:1px solid #39424B;border-radius:14px;padding:10px 14px;box-shadow:0 8px 30px #0008;transition:opacity .6s;max-width:calc(100vw - 32px)}
   body.idle .ctl{opacity:0;pointer-events:none}
   .ctl select{background:#1A2026;color:#fff;border:1px solid #39424B;border-radius:8px;padding:8px 10px;font:inherit;font-size:15px}
   .go{border:0;border-radius:10px;padding:11px 18px;font:inherit;font-size:16px;font-weight:800;cursor:pointer;background:var(--go);color:#062414}
@@ -24,6 +26,32 @@
   .stats{display:flex;gap:clamp(18px,3vw,56px);border-top:1px solid #2B333B;border-bottom:1px solid #2B333B;padding:clamp(10px,1.4vh,18px) 0;flex-wrap:wrap}
   .stat b{display:block;font-size:clamp(26px,3vw,50px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
   .stat span{font-size:clamp(12px,.95vw,15px);color:#9AA3AB;text-transform:uppercase;letter-spacing:.08em}
+  .stat small{display:block;font-size:clamp(12px,.95vw,15px);color:#C9CED3;margin-top:2px;max-width:22ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat.sep{border-left:1px solid #2B333B;padding-left:clamp(18px,3vw,56px)}
+  .chrono.warn #chrono{color:var(--vest)}
+  .chrono.over #chrono{color:#FF6B57;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.35}}
+  /* toutes les classes de la course dans un seul classement, sur deux colonnes */
+  .board{display:grid;grid-auto-flow:column;column-gap:clamp(24px,3vw,56px);align-content:start}
+  .board .lane{grid-template-columns:clamp(34px,2.6vw,48px) clamp(80px,6.6vw,120px) 1fr clamp(150px,11vw,210px)}
+  .cl .nv{display:inline-block;margin-left:8px;font-size:.45em;font-weight:700;color:#9AA3AB;border:1px solid #39424B;border-radius:6px;padding:1px 6px;vertical-align:middle}
+  .boardHead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .boardHead b{font-size:clamp(18px,1.7vw,28px)}
+  .boardHead span{font-size:clamp(11px,.9vw,15px);color:#9AA3AB;letter-spacing:.06em;text-transform:uppercase}
+  /* vue compacte (beaucoup de classes) : tout tient sur un écran 1080p */
+  body.compact .scr{gap:clamp(8px,1.3vh,16px)}
+  body.compact .ttl h1{font-size:clamp(24px,2.6vw,46px)}
+  body.compact .chrono{font-size:clamp(40px,4.8vw,92px)}
+  body.compact .stats{padding:clamp(6px,1vh,12px) 0}
+  body.compact .stat b{font-size:clamp(22px,2.4vw,42px)}
+  body.compact .defi{padding:clamp(8px,1.1vh,14px) clamp(14px,1.6vw,26px)}
+  body.compact .defi .pv{font-size:clamp(28px,3vw,52px)}
+  body.compact .chase .who{font-size:clamp(16px,1.5vw,26px)}
+  body.compact .board .lane{padding:clamp(3px,.55vh,7px) 0}
+  body.compact .board .val small{display:inline;margin-left:10px}
+  body.compact .board .val b{font-size:clamp(18px,1.7vw,30px)}
+  body.compact .board .cl{font-size:clamp(18px,1.7vw,30px)}
+  body.compact .board .lane{grid-template-columns:clamp(30px,2.4vw,44px) clamp(80px,6.6vw,120px) 1fr clamp(190px,14vw,260px)}
 
   /* Défi des profs */
   .defi{display:grid;grid-template-columns:auto 1fr;gap:clamp(16px,2.4vw,44px);align-items:center;
@@ -80,6 +108,7 @@
 <div class="scr">
   <div class="ctl" id="ctl">
     <label class="hint">Course affichée <select id="coSel"></select></label>
+    <label class="hint" id="vueW">Affichage <select id="vue"><option value="all">Toutes les classes</option><option value="niv">Par niveau</option></select></label>
     <button class="go" id="go" hidden>Donner le départ</button>
     <span class="hint" id="goHint"></span>
   </div>
@@ -97,7 +126,7 @@
   </div>
 </div>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar} from './app.js';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -114,7 +143,10 @@ store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.q
 function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; draw(); },700); }
 const courseId=cfg=>{ const w=q.get('course'); return (w&&cfg.courses[w])?w:(cfg.courses[cfg.courant]?cfg.courant:Object.keys(cfg.courses)[0]); };
 const nomCourt=d=>{ const n=noms[d]; return n?((n.prenom||'')+' '+(n.nom||'')).trim():''; };
-const stat=(v,l,id)=>`<div class="stat"><b${id?' id="'+id+'"':''}>${v}</b><span>${l}</span></div>`;
+const stat=(v,l,id,sub,cls)=>`<div class="stat${cls?' '+cls:''}"><b${id?' id="'+id+'"':''}>${v}</b><span>${l}</span>${sub!=null?'<small>'+sub+'</small>':''}</div>`;
+let VUE=LS.get('cross.direct.vue','all')||'all';
+$('vue').value=VUE;
+$('vue').onchange=e=>{ VUE=e.target.value; LS.set('cross.direct.vue',VUE); draw(); };
 
 function draw(){
   const res=compute(S), cfg=res.cfg, cid=courseId(cfg), co=cfg.courses[cid]||{nom:'Course',niveaux:''};
@@ -130,6 +162,7 @@ function controls(cfg,cid,co){
   const sel=$('coSel'), ids=Object.keys(cfg.courses);
   const h=ids.map(id=>`<option value="${esc(id)}"${id===cid?' selected':''}>${esc(cfg.courses[id].nom||'Course '+id)}${cfg.courses[id].debut&&!cfg.courses[id].fin?' · en cours':''}</option>`).join('');
   if(sel.innerHTML!==h) sel.innerHTML=h;
+  $('vueW').hidden=estArrivee(co);
   const b=$('go');
   if(arme===cid) return;               // bouton en attente de confirmation : on ne le redessine pas
   b.hidden=!!co.fin; b.classList.remove('arm');
@@ -147,13 +180,19 @@ $('go').onclick=()=>{
   if(arme!==cid){                      // 1er appui : armer (évite un départ par erreur)
     arme=cid; b.classList.add('arm');
     b.textContent=co.debut?'Confirmer la fin ?':'Confirmer le départ ?';
-    $('goHint').textContent='Appuyez encore pour confirmer';
+    const autres=Object.keys(cfg.courses).filter(id=>id!==cid&&cfg.courses[id].debut&&!cfg.courses[id].fin);
+    $('goHint').textContent='Appuyez encore pour confirmer'+(!co.debut&&autres.length?' — « '+autres.map(id=>cfg.courses[id].nom).join(', ')+' » sera terminée':'');
     clearTimeout(armeT); armeT=setTimeout(()=>{ arme=null; draw(); },4000);
     return;
   }
   clearTimeout(armeT); arme=null;
   const P='config/courses/'+cid+'/';
-  if(!co.debut) store.update({[P+'debut']:store.now(),[P+'fin']:null,'config/courant':cid});
+  if(!co.debut){
+    // une seule course ouverte à la fois : la précédente est terminée au départ de la suivante
+    const u={[P+'debut']:store.now(),[P+'fin']:null,'config/courant':cid};
+    for(const id in cfg.courses){ const c=cfg.courses[id]; if(id!==cid&&c.debut&&!c.fin) u['config/courses/'+id+'/fin']=store.now(); }
+    store.update(u);
+  }
   else if(!co.fin) store.update({[P+'fin']:store.now()});
   draw();
 };
@@ -162,21 +201,31 @@ $('go').onclick=()=>{
 function drawTours(res,cfg,cid,co){
   const cl=res.classes.filter(c=>c.course===cid);
   const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
-  $('stats').innerHTML=stat(tours.toLocaleString('fr-FR'),'tours bouclés','sTours')+stat(fr1(tours*cfg.boucle),'kilomètres parcourus','sKm')+stat(run,'coureurs en piste','sRun');
+  const M=res.meilleurs[cid]||{}, E=M.eleve, A=M.adulte;
+  const qui=L=>{ const p=L.p; if(p&&p.a) return esc(p.n||'Adulte n° '+L.d)+(p.cr?' · '+esc(p.cr):'');
+    if(!p) return 'Adulte n° '+L.d; const n=nomCourt(L.d); return (n?esc(n):'n° '+L.d)+' · '+esc(p.c); };
+  $('stats').innerHTML=stat(tours.toLocaleString('fr-FR'),'tours bouclés','sTours')+stat(fr1(tours*cfg.boucle),'kilomètres parcourus','sKm')+stat(run,'coureurs en piste','sRun')
+    +stat(E?fmtChrono(E.v):'—','meilleur tour élève','sBestE',E?qui(E.L):'',' sep')+stat(A?fmtChrono(A.v):'—','meilleur tour adulte','sBestA',A?qui(A.L):'');
 
   const pr=res.profs[cid]||{n:0,moy:0,total:0}, pm=pr.n?pr.moy:0;
   const max=Math.max(1,pm,...cl.map(c=>c.moy));
   const goal=pm?`<span class="goal" style="left:${100*pm/max}%"></span>`:'';
+  const lane=(c,i)=>{ const bat=pm>0&&c.moy>pm;
+    return `<div class="lane${i===0&&c.moy>0?' first':''}${bat?' beat':''}">
+      <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}${VUE==='all'?'<span class="nv">'+libNiveau(c.niv)+'</span>':''}</div>
+      <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i>${goal}</div>
+      <div class="val">${bat?'<span class="star">★ bat les profs</span> ':''}<b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`; };
   let niv=niveauxPresents(cfg,cid,res.classes);
   if(!niv.length) niv=niveauxDe(co).filter(n=>n!=='*');
-  $('cols').innerHTML=niv.map(n=>{
+  document.body.classList.toggle('compact',VUE==='all'&&cl.length>6);
+  if(VUE==='all'){
+    const rows=Math.max(1,cl.length>5?Math.ceil(cl.length/2):cl.length);
+    $('cols').innerHTML=cl.length?`<div style="grid-column:1/-1"><div class="boardHead"><b>Classement des ${cl.length} classes</b><span>moyenne de tours par élève</span></div>
+      <div class="board" style="grid-template-rows:repeat(${rows},auto)">${cl.map(lane).join('')}</div></div>`
+      :'<div class="empty">Aucune classe dans cette course : vérifiez les niveaux dans Organisation › Réglages.</div>';
+  } else $('cols').innerHTML=niv.map(n=>{
     const L=cl.filter(c=>c.niv===n);
-    const rows=L.length?L.map((c,i)=>{ const bat=pm>0&&c.moy>pm;
-      return `<div class="lane${i===0&&c.moy>0?' first':''}${bat?' beat':''}">
-      <div class="rk">${i+1}</div><div class="cl">${esc(c.c)}</div>
-      <div class="bar"><i style="width:${Math.max(2,100*c.moy/max)}%"></i>${goal}</div>
-      <div class="val">${bat?'<span class="star">★ bat les profs</span> ':''}<b>${fr1(c.moy)}</b><small>${c.total} tours · ${c.coureurs} élève${c.coureurs>1?'s':''}</small></div></div>`; }).join('')
-      :'<div class="empty">Aucune classe de ce niveau.</div>';
+    const rows=L.length?L.map(lane).join(''):'<div class="empty">Aucune classe de ce niveau.</div>';
     return `<div class="col"><h2><b>${libNiveau(n)}</b><span>moyenne de tours par élève</span></h2>${rows}</div>`;
   }).join('')||'<div class="empty">Aucune classe dans cette course : vérifiez les niveaux dans Organisation › Réglages.</div>';
 
@@ -218,7 +267,7 @@ function drawDefi(cl,pr,co){
 
 // ---------- course au classement d'arrivée (lycée) : du premier au dernier scanné
 function drawArrivee(res,cfg,cid,co){
-  $('defi').hidden=true;
+  $('defi').hidden=true; document.body.classList.remove('compact');
   const A=res.arrivees[cid]||{inscrits:0,arrives:[]}, L=A.arrives;
   const best=L.length&&L[0].temps!=null?fmtChrono(L[0].temps):'—';
   $('stats').innerHTML=stat(L.length,'arrivés','sArr')+stat(Math.max(0,A.inscrits-L.length),'encore en course','sRest')+stat(best,'meilleur temps');
@@ -237,11 +286,17 @@ function drawArrivee(res,cfg,cid,co){
 }
 
 function tick(){
-  const cfg=readCfg(S.config), co=cfg.courses[courseId(cfg)]||{};
-  if(!co.debut){ $('chrono').textContent='—'; $('chronoLbl').textContent='En attente du départ'; return; }
-  const fin=co.fin||store.now();
-  $('chrono').textContent=fmtChrono(fin-co.debut);
-  $('chronoLbl').textContent=co.fin?'Course terminée':'Temps de course';
+  const cfg=readCfg(S.config), co=cfg.courses[courseId(cfg)]||{}, box=$('chrono').parentNode;
+  const dec=!estArrivee(co)&&co.duree>0;          // collège : décompte de la durée de course
+  box.classList.remove('warn','over');
+  if(!co.debut){ $('chrono').textContent=dec?fmtChrono(co.duree*60000):'—'; $('chronoLbl').textContent=dec?'Durée de la course · en attente du départ':'En attente du départ'; return; }
+  const fin=co.fin||store.now(), ecoule=fin-co.debut;
+  if(!dec){ $('chrono').textContent=fmtChrono(ecoule); $('chronoLbl').textContent=co.fin?'Course terminée':'Temps de course'; return; }
+  const reste=co.duree*60000-ecoule;
+  if(co.fin){ $('chrono').textContent=fmtChrono(Math.max(0,reste)); $('chronoLbl').textContent='Course terminée · '+fmtChrono(ecoule)+' de course'; return; }
+  if(reste>0){ $('chrono').textContent=fmtChrono(Math.ceil(reste/1000)*1000); $('chronoLbl').textContent='Temps restant';
+    if(reste<=60000) box.classList.add('warn'); }
+  else { $('chrono').textContent='0:00'; $('chronoLbl').textContent='Temps écoulé — terminer la course'; box.classList.add('over'); }
 }
 setInterval(tick,1000);
 draw();

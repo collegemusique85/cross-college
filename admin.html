@@ -124,17 +124,24 @@
 
   <!-- SECOURS ------------------------------------------------------------>
   <details class="card">
-    <summary>Secours et export</summary>
+    <summary>Export, secours et réinitialisation</summary>
     <p class="muted">Si une tablette n'a pas pu se synchroniser, enregistrez ses passages sur la tablette (⚙ → « Enregistrer mes passages »), puis importez le fichier ici. Un passage déjà connu n'est jamais compté deux fois.</p>
     <div class="row">
       <input type="file" id="csvFile" accept=".csv,text/csv" multiple hidden>
       <button class="btn" id="csvPick">Importer des fichiers de tablettes (CSV)…</button>
       <button class="btn primary" id="xlsOut">Télécharger tous les résultats (Excel)</button>
+      <button class="btn" id="xlsCl">Résultats par classe, pour les collègues d'EPS (Excel)</button>
     </div>
     <div id="csvOut" style="margin-top:10px"></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
-    <p class="muted">Avant le jour J, effacez les passages des répétitions. Les participants, les adultes et les réglages sont conservés.</p>
-    <button class="btn danger" id="reset">Effacer tous les passages…</button>
+    <h3 style="font-size:16px">Réinitialiser</h3>
+    <p class="muted">Pour repartir de zéro après un test. Les tablettes ouvertes se rechargent et oublient leurs anciens passages. Les réglages (titre, courses, durées) sont toujours conservés.</p>
+    <div class="row">
+      <button class="btn danger" id="reset">Effacer les passages…</button>
+      <button class="btn danger" id="resetAll">Tout réinitialiser…</button>
+    </div>
+    <p class="small muted" style="margin-top:6px">« Effacer les passages » : scans, corrections, heures de départ et liste des tablettes ; les élèves, adultes et absents restent.
+    « Tout réinitialiser » : en plus, la liste des élèves, les adultes, les absents et les noms gardés sur cet ordinateur.</p>
   </details>
 </div>
 
@@ -142,7 +149,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,estArrivee,LS} from './app.js';
 
 navBar('admin.html');
 const store=await boot();
@@ -171,7 +178,7 @@ function drawCourses(){
       :`${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km`;
     const quoi=(c.niveaux==='*'||c.niveaux.split(',').includes('*')?'toutes les classes':'niveaux '+esc(c.niveaux))+(c.sexe==='F'?' · filles':c.sexe==='G'?' · garçons':'')+(AR?' · à l\'arrivée':' · aux tours');
     const etat=!c.debut?'<span class="tag">pas partie</span>':(c.fin?'<span class="tag">terminée</span>':'<span class="tag g">en cours</span>');
-    const chrono=c.debut?`<div class="chrono" data-chrono="${id}">${fmtChrono((c.fin||now())-c.debut)}</div>`:'';
+    const chrono=c.debut?`<div class="chrono" data-chrono="${id}">${chronoTxt(c)}</div>`:'';
     const btns=!c.debut?`<button class="btn vest" data-go="${id}">Donner le départ</button>`
       :(!c.fin?`<button class="btn primary" data-end="${id}">Fin de la course</button>`
       :`<button class="btn small" data-reopen="${id}">Rouvrir</button>`)
@@ -182,11 +189,19 @@ function drawCourses(){
       <div style="text-align:right">${chrono}<div class="row" style="justify-content:flex-end;margin-top:6px">${btns}</div></div></div>`;
   }).join('');
 }
-setInterval(()=>{ if(!res) return; document.querySelectorAll('[data-chrono]').forEach(el=>{ const c=res.cfg.courses[el.dataset.chrono]; if(c&&c.debut) el.textContent=fmtChrono((c.fin||now())-c.debut); }); },1000);
+// Collège : temps restant sur la durée prévue ; lycée (arrivée) : temps écoulé.
+function chronoTxt(c){ const e=(c.fin||now())-c.debut;
+  if(estArrivee(c)||!c.duree) return fmtChrono(e);
+  const r=c.duree*60000-e; return r>0?'reste '+fmtChrono(Math.ceil(r/1000)*1000):(c.fin?fmtChrono(e):'temps écoulé'); }
+setInterval(()=>{ if(!res) return; document.querySelectorAll('[data-chrono]').forEach(el=>{ const c=res.cfg.courses[el.dataset.chrono]; if(c&&c.debut) el.textContent=chronoTxt(c); }); },1000);
 $('courses').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return; const P='config/courses/';
-  if(b.dataset.go){ if(!confirm('Donner le départ de « '+res.cfg.courses[b.dataset.go].nom+' » maintenant ?')) return;
-    store.update({[P+b.dataset.go+'/debut']:now(),[P+b.dataset.go+'/fin']:null,'config/courant':b.dataset.go}); }
+  if(b.dataset.go){ const id=b.dataset.go, C=res.cfg.courses;
+    const autres=Object.keys(C).filter(x=>x!==id&&C[x].debut&&!C[x].fin);
+    if(!confirm('Donner le départ de « '+C[id].nom+' » maintenant ?'+(autres.length?'\n\n« '+autres.map(x=>C[x].nom).join(', ')+' » est encore ouverte : elle sera terminée maintenant.':''))) return;
+    const u={[P+id+'/debut']:now(),[P+id+'/fin']:null,'config/courant':id};
+    autres.forEach(x=>u[P+x+'/fin']=now());
+    store.update(u); }
   if(b.dataset.end){ if(confirm('Arrêter le comptage de cette course ? Les passages suivants ne compteront plus.')) store.update({[P+b.dataset.end+'/fin']:now()}); }
   if(b.dataset.reopen) store.update({[P+b.dataset.reopen+'/fin']:null});
   if(b.dataset.undo){ if(confirm('Annuler le départ ? Les tours déjà comptés disparaîtront des classements (les passages restent enregistrés).')) store.update({[P+b.dataset.undo+'/debut']:null,[P+b.dataset.undo+'/fin']:null}); }
@@ -393,12 +408,14 @@ function fillCfg(){
     <div class="row" style="justify-content:space-between"><b>Course ${esc(id)}</b><button class="btn small danger" data-cdel="${esc(id)}">Supprimer</button></div>
     <label>Nom <input data-cn="${esc(id)}" value="${esc(x.nom)}"></label>
     <label>Niveaux (6,5 · 2,1,T · * = toutes) <input data-cv="${esc(id)}" value="${esc(x.niveaux)}"></label>
+    <label${x.type==='arrivee'?' hidden':''} data-cdw="${esc(id)}">Durée de la course (min) — décompte sur la page Direct <input data-cd="${esc(id)}" inputmode="numeric" value="${x.duree||''}"></label>
     <label>Type <select data-ct="${esc(id)}"><option value="tours"${x.type!=='arrivee'?' selected':''}>Tours comptés (collège)</option><option value="arrivee"${x.type==='arrivee'?' selected':''}>Classement à l'arrivée (lycée)</option></select></label>
     <label${x.type==='arrivee'?'':' hidden'} data-cxw="${esc(id)}">Participants <select data-cx="${esc(id)}"><option value="">Filles et garçons</option><option value="F"${x.sexe==='F'?' selected':''}>Filles seulement</option><option value="G"${x.sexe==='G'?' selected':''}>Garçons seulement</option></select></label>
   </div>`).join('');
   cfgFilled=true;
 }
-$('cCourses').onchange=e=>{ const t=e.target.closest('[data-ct]'); if(t) document.querySelector('[data-cxw="'+t.dataset.ct+'"]').hidden=t.value!=='arrivee'; };
+$('cCourses').onchange=e=>{ const t=e.target.closest('[data-ct]'); if(t){ document.querySelector('[data-cxw="'+t.dataset.ct+'"]').hidden=t.value!=='arrivee';
+  document.querySelector('[data-cdw="'+t.dataset.ct+'"]').hidden=t.value==='arrivee'; } };
 $('cCourses').onclick=e=>{ const b=e.target.closest('[data-cdel]'); if(!b) return; const id=b.dataset.cdel, co=readCfg(S.config).courses[id];
   if(Object.keys(readCfg(S.config).courses).length<2){ alert('Il faut garder au moins une course.'); return; }
   if(!confirm('Supprimer « '+co.nom+' » ?'+(co.debut?' Elle a déjà un départ : ses résultats disparaîtront des classements.':''))) return;
@@ -407,7 +424,7 @@ $('cAdd').onclick=()=>{ const ids=Object.keys({...readCfg({}).courses,...(S.conf
   const id=String(Math.max(0,...ids)+1);
   store.update({['config/courses/'+id]:{nom:'Course '+id,niveaux:'',type:'tours'}}).then(()=>{ cfgFilled=false; fillCfg(); }); };
 const PRESETS={
-  college:{titre:'Cross du collège',courses:{'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours'},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours'}}},
+  college:{titre:'Cross du collège',courses:{'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours',duree:45},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours',duree:45}}},
   lycee1:{titre:'Cross du lycée',courses:{'1':{nom:'Cross du lycée',niveaux:'*',type:'arrivee'}}},
   lycee2:{titre:'Cross du lycée',courses:{'1':{nom:'Course des filles',niveaux:'*',type:'arrivee',sexe:'F'},'2':{nom:'Course des garçons',niveaux:'*',type:'arrivee',sexe:'G'}}}
 };
@@ -428,6 +445,7 @@ $('cSave').onclick=()=>{
   document.querySelectorAll('[data-cn]').forEach(i=>u['config/courses/'+i.dataset.cn+'/nom']=i.value.trim()||'Course '+i.dataset.cn);
   document.querySelectorAll('[data-cv]').forEach(i=>u['config/courses/'+i.dataset.cv+'/niveaux']=i.value.replace(/\s+/g,'').toUpperCase());
   document.querySelectorAll('[data-ct]').forEach(i=>u['config/courses/'+i.dataset.ct+'/type']=i.value);
+  document.querySelectorAll('[data-cd]').forEach(i=>u['config/courses/'+i.dataset.cd+'/duree']=Math.max(0,parseInt(i.value,10)||0));
   document.querySelectorAll('[data-cx]').forEach(i=>u['config/courses/'+i.dataset.cx+'/sexe']=(i.closest('.cc').querySelector('[data-ct]').value==='arrivee'&&i.value)||null);
   store.update(u).then(()=>{ $('cSave').textContent='Enregistré ✓'; setTimeout(()=>$('cSave').textContent='Enregistrer les réglages',1500); });
 };
@@ -451,12 +469,21 @@ $('csvFile').onchange=async e=>{
   $('csvOut').innerHTML=`<p class="msg o">${neuf} passage(s) ajouté(s) · ${deja} déjà connu(s)${bad?' · '+bad+' ligne(s) illisible(s)':''}.</p>`;
 };
 $('xlsOut').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
+$('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
 $('reset').onclick=()=>{
   const n=Object.keys(S.scans).length;
   const r=prompt('Effacer les '+n+' passages, les corrections, les horaires de course et la liste des tablettes ?\nLes participants, adultes et réglages sont conservés.\n\nTapez EFFACER pour confirmer.');
   if(r!=='EFFACER') return;
   const u={scans:null,corrections:null,devices:null,'config/resetAt':now()};
   for(const id in readCfg(S.config).courses){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
+  store.update(u).then(()=>location.reload());
+};
+$('resetAll').onclick=()=>{
+  const r=prompt('Tout effacer : élèves, adultes, absents, passages, corrections, heures de départ, tablettes et noms gardés sur cet ordinateur ?\nSeuls les réglages sont conservés. Pensez à télécharger les résultats avant.\n\nTapez TOUT EFFACER pour confirmer.');
+  if(r==null||r.trim().toUpperCase()!=='TOUT EFFACER') return;
+  const u={participants:null,scans:null,corrections:null,devices:null,'config/resetAt':now()};
+  for(const id in readCfg(S.config).courses){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
+  setNoms(store.key,{}); LS.del('cross.podium.'+store.key);
   store.update(u).then(()=>location.reload());
 };
 later();

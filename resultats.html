@@ -22,9 +22,7 @@
   .cat{font-size:clamp(24px,2.6vw,44px);font-weight:800;letter-spacing:-.01em}
   .cat span{color:#9AA3AB;font-weight:500}
   .podium{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:end;gap:clamp(10px,1.6vw,26px);min-height:clamp(220px,36vh,440px)}
-  .step{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:12px;opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}
-  .step.show{opacity:1;transform:none}
-  @media (prefers-reduced-motion:reduce){.step{transition:none}}
+  .step{display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;gap:12px}
   .who{text-align:center}
   .who .g{font-size:clamp(22px,2.4vw,42px);font-weight:800;letter-spacing:-.01em}
   .who .m{font-size:clamp(12px,1vw,16px);color:#C9CED3;margin-top:4px;line-height:1.35}
@@ -43,6 +41,11 @@
   .foot{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;color:#9AA3AB;font-size:13px}
   .ghost{background:none;border:1px solid #39424B;color:#C9CED3;border-radius:8px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
   .hint{color:#9AA3AB;font-size:13px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .filters .sepv{width:1px;height:26px;background:#39424B;margin:0 4px}
+  .filters select{background:#1A2026;color:#fff;border:1px solid #39424B;border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}
+  .chip.grp{border-style:dashed}
+  table.rk td.dim{color:#9AA3AB}
   table.rk tr.profs td{color:var(--vest);font-style:italic}
   .beat{display:inline-block;margin-left:6px;font-size:.75em;background:var(--go);color:#062414;border-radius:99px;padding:1px 7px;font-weight:800;font-style:normal}
 </style>
@@ -50,37 +53,32 @@
 <body>
 <div class="scr">
   <header>
-    <div><div class="k" id="kicker">Résultats</div><h1 id="title">Podiums des groupes</h1></div>
-    <div class="nav" id="secs"></div>
+    <div><div class="k" id="kicker">Résultats</div><h1 id="title">Podiums</h1></div>
   </header>
-  <div class="nav" id="cats"></div>
+  <div class="filters" id="secs"></div>
+  <div class="filters"><div class="filters" id="cats"></div><span class="sepv"></span>
+    <label class="hint" id="clW">Classe <select id="clSel"></select></label></div>
 
-  <div class="lock" id="lock">
-    <p>Les podiums sont masqués. Ils se dévoilent place par place : 3<sup>e</sup>, 2<sup>e</sup>, puis 1<sup>re</sup> place, avec la flèche droite du clavier ou le bouton « Suivant ».</p>
-    <button class="btn vest" id="unlock" style="font-size:18px;padding:16px 26px">Dévoiler les podiums</button>
-  </div>
-
-  <div class="stage" id="stage" hidden>
-    <div class="cat" id="catTitle"></div>
+  <div class="stage" id="stage">
+    <div><div class="cat" id="catTitle"></div><div class="hint" id="note" style="margin-top:4px"></div></div>
     <div class="podium" id="podium"></div>
-    <div class="row"><button class="btn vest" id="next">Suivant →</button><button class="ghost" id="all">Tout afficher</button>
-      <span class="hint">Flèches ← → du clavier</span></div>
-    <table class="rk" id="table" hidden></table>
+    <table class="rk" id="table"></table>
   </div>
 
   <div class="foot">
     <div class="row">
       <button class="ghost" id="names">Afficher les noms (fichier Excel)</button>
       <input type="file" id="nameFile" accept=".xlsx,.xls,.csv" hidden>
-      <button class="ghost" id="xls">Télécharger les résultats (Excel)</button>
-      <button class="ghost" id="relock">Masquer à nouveau</button>
+      <button class="ghost" id="xls">Tous les résultats (Excel)</button>
+      <button class="ghost" id="xlsCl">Résultats par classe, pour l'EPS (Excel)</button>
     </div>
     <span id="net" class="pill"><i></i><span>…</span></span>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,niveauxDe,niveauxPresents,libNiveau,estArrivee,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,parseWorkbook,exportWorkbook,LS,navBar} from './app.js';
+import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,
+  parseWorkbook,exportWorkbook,exportParClasse,trierIndiv,rangsIndiv,LS,navBar} from './app.js';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -91,94 +89,123 @@ store.onValue('corrections',v=>{S.corrections=v; later();});
 store.onValue('config',v=>{S.config=v; later();});
 store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
 store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
-
-// Catégories : courses aux tours (groupes + classes) et courses à l'arrivée (individuel)
-const CATS_T=[['F','Filles'],['G','Garçons'],['M','Mixtes'],['C','Classes']];
-const CATS_A=[['F','Filles'],['G','Garçons'],['S','Général']];
-const RK='cross.podium.'+store.key;
-let st=Object.assign({open:false,sec:null,cat:'F',step:0,all:false},LS.get(RK,{}));
-const save=()=>LS.set(RK,st);
 function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; res=compute(S); draw(); },600); }
 
-// Une « section » = un niveau d'une course aux tours, ou une course à l'arrivée.
+// ------------------------------------------------------------ catégories
+const CATS_T=[['F','Groupes filles','g'],['G','Groupes garçons','g'],['M','Groupes mixtes','g'],['C','Classes'],
+  ['iF','Filles'],['iG','Garçons'],['iT','Tous les élèves'],['iR','Tours les plus rapides'],['AD','Adultes']];
+const CATS_A=[['F','Filles'],['G','Garçons'],['S','Général']];
+const RK='cross.podium2.'+store.key;
+let st=Object.assign({sec:null,cat:'F',cl:''},LS.get(RK,{}));
+const save=()=>LS.set(RK,st);
+const kLab=n=>/^\d$/.test(n)?n+'e':n;
+
+// Sections : chaque niveau, chaque course (niveaux confondus), puis le lycée.
 function sections(){
-  const out=[], cfg=res.cfg, ids=Object.keys(cfg.courses), plus=ids.length>1;
-  for(const id of ids){ const co=cfg.courses[id];
-    if(estArrivee(co)){ out.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Course '+id)}); continue; }
-    let N=niveauxPresents(cfg,id,res.classes); if(!N.length) N=niveauxDe(co).filter(n=>n!=='*');
-    for(const n of N) out.push({k:'n:'+id+':'+n,id,niv:n,lab:libNiveau(n)});
+  const cfg=res.cfg, niv=[], comb=[], lyc=[];
+  for(const id in cfg.courses){ const co=cfg.courses[id];
+    if(estArrivee(co)){ lyc.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Lycée')}); continue; }
+    const N=[...new Set([...niveauxDe(co).filter(n=>n!=='*').map(n=>n.toUpperCase()[0]),...niveauxPresents(cfg,id,res.classes)])];
+    for(const n of N) niv.push({k:'n:'+id+':'+n,ids:[id],niv:[n],lab:libNiveau(n)});
+    if(N.length>1) comb.push({k:'c:'+id,ids:[id],niv:N,comb:true,lab:N.map(kLab).join('-')});
   }
-  return out;
+  if(!lyc.length) lyc.push({k:'lycee',vide:true,lab:'Lycée'});
+  if(lyc.length===1&&!lyc[0].vide) lyc[0].lab='Lycée';
+  return [...niv,...comb,...lyc];
 }
-const catsDe=sec=>!sec||!sec.arr?CATS_T:(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A);
+const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A)
+  :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
+const dansSec=(sec,p)=>p&&!p.a&&sec.ids.includes(courseDe(res.cfg,p))&&sec.niv.includes(niveauDe(p.c));
+const mm=ms=>ms==null?'—':fmtChrono(ms);
+const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
+
+// Une liste = {rows:[{lab,sub,score,rang,cells:[]}], cols:[], note}
 function liste(sec){
+  const cfg=res.cfg, cat=st.cat, fcl=st.cl;
   if(sec.arr){
     const A=(res.arrivees[sec.id]||{arrives:[]}).arrives;
-    const L=st.cat==='S'?A:A.filter(x=>x.p.s===st.cat);
-    return L.map(x=>({lab:nomDe(noms,x)||'Dossard '+x.d, rang:st.cat==='S'?x.rang:x.rangSexe,
-      val:x.temps!=null?fmtChrono(x.temps):'—', sub:x.p.c+' · n° '+x.d, det:x.p.c}));
+    let L=cat==='S'?A:A.filter(x=>x.p.s===cat); if(fcl) L=L.filter(x=>x.p.c===fcl);
+    return {cols:['Rang','Coureur','Temps','Classe'],rows:L.map(x=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
+      rang:cat==='S'?x.rang:x.rangSexe,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d]}))};
   }
-  const pm=(res.profs[sec.id]||{}).n?res.profs[sec.id].moy:0;
-  if(st.cat==='C') return res.classes.filter(c=>c.course===sec.id&&c.niv===sec.niv&&c.total>0)
-    .map(c=>({lab:c.c,moy:c.moy,beat:pm>0&&c.moy>pm,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),det:c.coureurs+' / '+c.inscrits+' élèves'}));
-  return res.groupes.filter(g=>g.course===sec.id&&g.niv===sec.niv&&g.ty===st.cat&&g.moy>0).map(g=>({
-    lab:g.c+' · '+g.g, moy:g.moy,
-    sub:g.membres.filter(m=>!m.p.st).map(m=>(nomDe(noms,m)||('n° '+m.d))+' ('+m.tours+')').join(', '),
-    det:g.coureurs+' / '+g.membres.length}));
+  const pr=sec.ids.map(id=>res.profs[id]).find(p=>p&&p.n), pm=pr?pr.moy:0;
+  if(cat==='C'){
+    const L=res.classes.filter(c=>sec.ids.includes(c.course)&&sec.niv.includes(c.niv)&&c.total>0);
+    const R=rangsMoy(L);
+    const rows=L.map((c,i)=>({lab:c.c,sub:c.total+' tours · '+c.coureurs+' élève'+(c.coureurs>1?'s':'')+(c.ta?' · dont '+c.ta+' tours d\'adultes':''),
+      score:fr1(c.moy)+' tours',rang:R[i],beat:pm>0&&c.moy>pm,m:c.moy,
+      cells:[c.c+(sec.niv.length>1?' ('+kLab(c.niv)+')':''),fr1(c.moy),c.coureurs+' / '+c.inscrits,c.total+' tours'+(c.ta?' dont '+c.ta+' d\'adultes':'')]}));
+    if(pr){ const at=rows.findIndex(r=>r.m<pr.moy);
+      rows.splice(at<0?rows.length:at,0,{profs:true,cells:['Les profs (défi)',fr1(pr.moy),pr.n+' adulte'+(pr.n>1?'s':''),pr.total+' tours — hors classement']}); }
+    return {cols:['Rang','Classe','Moyenne','Élèves ayant couru','Tours'],rows,podium:rows.filter(r=>!r.profs)};
+  }
+  if(['F','G','M'].includes(cat)){
+    let L=res.groupes.filter(g=>sec.ids.includes(g.course)&&sec.niv.includes(g.niv)&&g.ty===cat&&g.moy>0);
+    if(fcl) L=L.filter(g=>g.c===fcl);
+    const R=rangsMoy(L);
+    return {cols:['Rang','Groupe','Moyenne','Membres ayant couru','Tours de chacun'],rows:L.map((g,i)=>{
+      const mem=g.membres.filter(m=>!m.p.st).map(m=>(nomDe(noms,m)||('n° '+m.d))+' ('+m.tours+')').join(', ');
+      return {lab:g.c+' · '+g.g,sub:mem,score:fr1(g.moy)+' tours',rang:R[i],cells:[g.c+' · '+g.g,fr1(g.moy),g.coureurs+' / '+g.membres.length,mem]}; })};
+  }
+  if(cat==='AD'){
+    const id=sec.ids[0], w=res.win[id];
+    const L=Object.values(res.lignes).filter(x=>(x.p?x.p.a:estAdulteNum(x.d))&&!(x.p&&x.p.st)&&w)
+      .map(x=>{ const lp=x.laps.filter(t=>t>=w.a&&t<=w.b); let b=null; for(let i=1;i<lp.length;i++){ const v=lp[i]-lp[i-1]; if(b==null||v<b) b=v; }
+        return {...x,tours:lp.length,best:b,moy:lp.length>1?(lp[lp.length-1]-lp[0])/(lp.length-1):null}; }).filter(x=>x.tours>0);
+    const T=trierIndiv(L), R=rangsIndiv(T);
+    return {cols:['Rang','Adulte','Classe créditée','Tours','Km','Tour moyen','Meilleur tour'],rows:T.map((x,i)=>({lab:qui(x),
+      sub:(x.p&&x.p.cr?'pour la '+x.p.cr:'sans classe')+' · meilleur tour '+mm(x.best),score:x.tours+' tours',rang:R[i],
+      cells:[qui(x),x.p&&x.p.cr||'—',x.tours,fr1(x.tours*cfg.boucle),mm(x.moy),mm(x.best)]}))};
+  }
+  // individuels
+  let L=Object.values(res.lignes).filter(x=>dansSec(sec,x.p)&&!x.p.st&&x.tours>0);
+  if(cat==='iF') L=L.filter(x=>x.p.s==='F'); if(cat==='iG') L=L.filter(x=>x.p.s==='G');
+  if(fcl) L=L.filter(x=>x.p.c===fcl);
+  if(cat==='iR'){
+    const T=L.filter(x=>x.best!=null).sort((a,b)=>a.best-b.best);
+    let r=0,prev=null; const R=T.map((x,i)=>{ const k=Math.floor(x.best/1000); if(k!==prev){ r=i+1; prev=k; } return r; });
+    return {cols:['Rang','Élève','Classe','Meilleur tour','Tour moyen','Tours'],rows:T.map((x,i)=>({lab:qui(x),sub:x.p.c+' · '+x.tours+' tours',score:mm(x.best),rang:R[i],
+      cells:[qui(x),x.p.c+(x.p.s?' · '+x.p.s:''),mm(x.best),mm(x.moy),x.tours]})),note:'Temps entre deux passages sous les tablettes (le premier tour, depuis le départ, n\'est pas chronométré).'};
+  }
+  const T=trierIndiv(L), R=rangsIndiv(T);
+  return {cols:['Rang','Élève','Classe','Tours','Km','Tour moyen','Meilleur tour'],rows:T.map((x,i)=>({lab:qui(x),
+    sub:x.p.c+' · '+fr1(x.tours*cfg.boucle)+' km · tour moyen '+mm(x.moy),score:x.tours+' tours',rang:R[i],
+    cells:[qui(x),x.p.c+(cat==='iT'&&x.p.s?' · '+x.p.s:''),x.tours,fr1(x.tours*cfg.boucle),mm(x.moy),mm(x.best)]})),
+    note:'À égalité de tours, le tour moyen le plus rapide passe devant.'};
 }
-function rangs(L){ if(L.length&&L[0].rang!=null) return L.map(x=>x.rang);
-  let r=0,prev=null; return L.map((x,i)=>{ const v=Math.round(x.moy*100); if(v!==prev){ r=i+1; prev=v; } return r; }); }
+function rangsMoy(L){ let r=0,prev=null; return L.map((x,i)=>{ const v=Math.round(x.moy*100); if(v!==prev){ r=i+1; prev=v; } return r; }); }
 
 function draw(){
   if(!res) return;
   const SE=sections(); let sec=SE.find(x=>x.k===st.sec); if(!sec){ sec=SE[0]; st.sec=sec&&sec.k; }
-  const CATS=catsDe(sec); if(!CATS.some(c=>c[0]===st.cat)) st.cat=CATS[0][0];
-  $('title').textContent=res.cfg.titre||'Cross du collège';
-  $('kicker').textContent=sec&&sec.arr?'Classement à l\'arrivée':'Podiums des groupes';
+  const CATS=catsDe(sec); if(CATS.length&&!CATS.some(c=>c[0]===st.cat)) st.cat=CATS[0][0];
+  $('title').textContent=res.cfg.titre||'Cross';
   $('secs').innerHTML=SE.map(x=>`<button class="chip${x.k===st.sec?' on':''}" data-s="${esc(x.k)}">${x.lab}</button>`).join('');
-  $('cats').innerHTML=CATS.map(([k,l])=>`<button class="chip${k===st.cat?' on':''}" data-c="${k}">${l}</button>`).join('');
-  $('lock').hidden=st.open; $('stage').hidden=!st.open;
-  if(!st.open||!sec) return;
-  const L=liste(sec), R=rangs(L), catLab=CATS.find(c=>c[0]===st.cat)[1];
-  $('catTitle').innerHTML=sec.arr
-    ? sec.lab+' · '+esc(catLab)+' <span>— ordre d\'arrivée</span>'
-    : sec.lab+' · '+(st.cat==='C'?'Classes':'Groupes '+esc(TYPES[st.cat].toLowerCase()))+' <span>— moyenne de tours par '+(st.cat==='C'?'élève':'membre')+'</span>';
-  const score=x=>x.val!=null?x.val:fr1(x.moy)+' tours';
-  const slot=(i,cls)=>{ const x=L[i]; if(!x) return `<div class="step ${cls}"></div>`;
-    const vis=st.all||st.step>=3-i;
-    return `<div class="step ${cls}${vis?' show':''}"><div class="who"><div class="g">${esc(x.lab)}</div><div class="m">${esc(x.sub)}${x.beat?' <span class="beat">a battu les profs</span>':''}</div></div>
-      <div class="block"><div class="pl">${R[i]}</div><div class="sc">${esc(score(x))}</div></div></div>`; };
-  $('podium').innerHTML=L.length?slot(1,'p2')+slot(0,'p1')+slot(2,'p3'):'<div class="hint">Aucun résultat dans cette catégorie.</div>';
-  const done=st.all||st.step>=3;
-  $('next').textContent=done?'Catégorie suivante →':'Suivant →';
-  $('table').hidden=!done;
-  if(sec.arr){
-    $('table').innerHTML='<tr><th>Rang</th><th>Coureur</th><th>Temps</th><th>Classe</th></tr>'+
-      L.map((x,i)=>`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b></td><td class="n">${esc(x.val)}</td><td>${esc(x.sub)}</td></tr>`).join('');
-  } else {
-    let rows=L.map((x,i)=>({m:x.moy,h:`<tr><td class="n">${R[i]}</td><td><b>${esc(x.lab)}</b>${x.beat?'<span class="beat">bat les profs</span>':''}</td><td class="n">${fr1(x.moy)}</td><td>${esc(x.det)}</td><td>${esc(x.sub)}</td></tr>`}));
-    const pr=res.profs[sec.id];
-    if(st.cat==='C'&&pr&&pr.n){ // ligne « défi » hors classement, placée à sa hauteur
-      const h=`<tr class="profs"><td class="n">défi</td><td><b>Les profs</b></td><td class="n">${fr1(pr.moy)}</td><td>${pr.n} adulte${pr.n>1?'s':''}</td><td>${pr.total} tours — hors classement</td></tr>`;
-      const at=rows.findIndex(r=>r.m<pr.moy); rows.splice(at<0?rows.length:at,0,{h}); }
-    $('table').innerHTML='<tr><th>Rang</th><th>'+(st.cat==='C'?'Classe':'Groupe')+'</th><th>Moyenne</th><th>'+(st.cat==='C'?'Élèves ayant couru':'Membres ayant couru')+'</th><th>'+(st.cat==='C'?'Détail':'Tours de chacun')+'</th></tr>'+rows.map(r=>r.h).join('');
-  }
+  $('cats').innerHTML=CATS.map(([k,l,g])=>`<button class="chip${g?' grp':''}${k===st.cat?' on':''}" data-c="${k}">${l}</button>`).join('');
+  // filtre classe : utile pour les groupes et les élèves
+  const cls=sec&&!sec.vide?[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id:dansSec(sec,p))).map(p=>p.c))]
+    .sort((a,b)=>a.localeCompare(b,'fr',{numeric:true})):[];
+  if(st.cl&&!cls.includes(st.cl)) st.cl='';
+  $('clSel').innerHTML='<option value="">Toutes</option>'+cls.map(c=>`<option${c===st.cl?' selected':''}>${esc(c)}</option>`).join('');
+  $('clW').hidden=!sec||sec.vide||['C','AD'].includes(st.cat);
+  if(!sec||sec.vide){ $('kicker').textContent='Lycée'; $('catTitle').innerHTML='Le lycée n\'est pas encore configuré <span>— Organisation › Réglages</span>';
+    $('podium').innerHTML=''; $('table').innerHTML=''; $('note').textContent=''; save(); return; }
+  const catLab=CATS.find(c=>c[0]===st.cat)[1];
+  $('kicker').textContent=sec.arr?'Classement à l\'arrivée':'Podiums';
+  const Lst=liste(sec), P=Lst.podium||Lst.rows;
+  $('catTitle').innerHTML=sec.lab+' · '+esc(catLab)+(st.cl&&!$('clW').hidden?' · '+esc(st.cl):''); $('note').textContent=Lst.note||'';
+  const slot=(i,cls)=>{ const x=P[i]; if(!x) return `<div class="step ${cls}"></div>`;
+    return `<div class="step ${cls}"><div class="who"><div class="g">${esc(x.lab)}</div><div class="m">${esc(x.sub)}${x.beat?' <span class="beat">a battu les profs</span>':''}</div></div>
+      <div class="block"><div class="pl">${x.rang}</div><div class="sc">${esc(x.score)}</div></div></div>`; };
+  $('podium').innerHTML=P.length?slot(1,'p2')+slot(0,'p1')+slot(2,'p3'):'<div class="hint">Aucun résultat dans cette catégorie.</div>';
+  $('table').innerHTML='<tr>'+Lst.cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'+Lst.rows.map(r=>r.profs
+    ?'<tr class="profs"><td class="n">défi</td>'+r.cells.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>'
+    :'<tr><td class="n">'+r.rang+'</td>'+r.cells.map((c,j)=>'<td'+(j?'':'')+'>'+(j===0?'<b>'+esc(c)+'</b>'+(r.beat?'<span class="beat">bat les profs</span>':''):esc(c))+'</td>').join('')+'</tr>').join('');
   save();
 }
-function suite(){
-  const SE=sections(), si=SE.findIndex(x=>x.k===st.sec), CATS=catsDe(SE[si]), ci=CATS.findIndex(c=>c[0]===st.cat);
-  if(!st.all&&st.step<3){ st.step++; draw(); return; }
-  if(ci<CATS.length-1) st.cat=CATS[ci+1][0]; else if(si<SE.length-1){ st.sec=SE[si+1].k; st.cat=catsDe(SE[si+1])[0][0]; }
-  st.step=0; st.all=false; draw();
-}
-function retour(){ if(st.step>0&&!st.all){ st.step--; draw(); } }
-$('secs').onclick=e=>{ const b=e.target.closest('[data-s]'); if(b){ st.sec=b.dataset.s; st.step=0; st.all=false; draw(); } };
-$('cats').onclick=e=>{ const b=e.target.closest('[data-c]'); if(b){ st.cat=b.dataset.c; st.step=0; st.all=false; draw(); } };
-$('unlock').onclick=()=>{ st.open=true; st.step=0; draw(); };
-$('relock').onclick=()=>{ st.open=false; st.step=0; st.all=false; draw(); };
-$('next').onclick=suite;
-$('all').onclick=()=>{ st.all=true; draw(); };
-addEventListener('keydown',e=>{ if(!st.open) return; if(e.key==='ArrowRight'||e.key===' '){ e.preventDefault(); suite(); } if(e.key==='ArrowLeft') retour(); });
+$('secs').onclick=e=>{ const b=e.target.closest('[data-s]'); if(b){ st.sec=b.dataset.s; st.cl=''; draw(); } };
+$('cats').onclick=e=>{ const b=e.target.closest('[data-c]'); if(b){ st.cat=b.dataset.c; draw(); } };
+$('clSel').onchange=e=>{ st.cl=e.target.value; draw(); };
 
 $('names').onclick=()=>$('nameFile').click();
 $('nameFile').onchange=async e=>{
@@ -191,6 +218,7 @@ $('nameFile').onchange=async e=>{
   draw();
 };
 $('xls').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
+$('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
 </script>
 </body>
 </html>

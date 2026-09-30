@@ -130,8 +130,8 @@ export const DEFAULT_CFG = {
   delai:0,         // s : passages ignorés juste après le départ
   courant:'1',
   courses:{
-    '1':{nom:'Course 1',niveaux:'6,5',type:'tours',debut:null,fin:null},
-    '2':{nom:'Course 2',niveaux:'4,3',type:'tours',debut:null,fin:null}
+    '1':{nom:'Course 1',niveaux:'6,5',type:'tours',duree:45,debut:null,fin:null},
+    '2':{nom:'Course 2',niveaux:'4,3',type:'tours',duree:45,debut:null,fin:null}
   }
 };
 export function readCfg(raw){
@@ -140,6 +140,7 @@ export function readCfg(raw){
   c.courses={};
   for(const id of new Set([...Object.keys(DEFAULT_CFG.courses),...Object.keys(raw.courses||{})]))
     { const o={...(DEFAULT_CFG.courses[id]||{nom:'Course '+id,niveaux:'',type:'tours'}),...((raw.courses||{})[id]||{})};
+      o.duree=Math.max(0,+o.duree||0);
       if(!o.off) c.courses[id]=o; }   // off:true = course supprimée
   for(const k of ['absence','plafond','boucle','delai']) c[k]=+c[k]||0;
   if(!c.absence) c.absence=60;
@@ -276,13 +277,18 @@ export function compute(state){
   A.plafond.sort((a,b)=>b.tours-a.tours);
 
   // Défi « qui battra les profs ? » : moyenne des adultes, course par course
-  const profs={};
+  const profs={}, meilleurs={};
   for(const id in cfg.courses){
-    let n=0,total=0;
-    for(const d in lignes){ if(!estAd(d)) continue; const L=lignes[d]; if(L.p&&L.p.st) continue;
-      const k=win[id]?L.laps.filter(t=>t>=win[id].a&&t<=win[id].b).length:0;
-      if(k>0){ n++; total+=k; } }
+    let n=0,total=0,bestA=null,bestE=null;
+    for(const d in lignes){ const L=lignes[d];
+      if(estAd(d)){ if(L.p&&L.p.st) continue;
+        const lp=win[id]?L.laps.filter(t=>t>=win[id].a&&t<=win[id].b):[];
+        if(lp.length>0){ n++; total+=lp.length; }
+        for(let i=1;i<lp.length;i++){ const v=lp[i]-lp[i-1]; if(!bestA||v<bestA.v) bestA={v,L}; }
+      } else if(L.p&&!L.p.st&&courseDe(cfg,L.p)===id&&L.best!=null&&(!bestE||L.best<bestE.v)) bestE={v:L.best,L};
+    }
     profs[id]={n,total,moy:n?total/n:0};
+    meilleurs[id]={adulte:bestA,eleve:bestE};
   }
 
   // Courses « à l'arrivée » : premier passage après le départ = arrivée
@@ -300,7 +306,7 @@ export function compute(state){
   const totaux={passages:0};
   for(const d in lignes) totaux.passages+=lignes[d].tours;
   totaux.km=totaux.passages*cfg.boucle;
-  return {cfg,lignes,classes,groupes,A,compte,totaux,win,profs,arrivees};
+  return {cfg,lignes,classes,groupes,A,compte,totaux,win,profs,arrivees,meilleurs};
 }
 
 // ---------------------------------------------------------------- noms (restent sur l'appareil)
@@ -419,6 +425,49 @@ export function prepareImport(rows,cfg,existing){
   if(horsCourse.length) W.push('Classes rattachées à aucune course : '+horsCourse.join(', ')+'. Vérifiez les niveaux des courses.');
   const nCl=new Set(Object.values(parts).map(p=>p.c)).size;
   return {parts,noms,E,W,stats:{eleves:Object.keys(parts).length,classes:nCl,groupes:Object.keys(grp).length}};
+}
+
+// ---------------------------------------------------------------- classements individuels
+// Plus de tours d'abord ; à égalité, le tour moyen le plus rapide, puis le meilleur tour.
+export function trierIndiv(L){
+  const v=x=>x==null?Infinity:x;
+  return L.slice().sort((a,b)=>b.tours-a.tours||v(a.moy)-v(b.moy)||v(a.best)-v(b.best)||a.d-b.d);
+}
+export function rangsIndiv(L){ let r=0,prev=null; return L.map((x,i)=>{ const k=x.tours+'|'+(x.moy==null?'':Math.floor(x.moy/1000));
+  if(k!==prev){ r=i+1; prev=k; } return r; }); }
+export const mmss = ms => ms==null?'':fmtChrono(ms);
+
+// ---------------------------------------------------------------- export par classe (pour les collègues d'EPS)
+export function exportParClasse(res,noms){
+  const cfg=res.cfg, wb=XLSX.utils.book_new();
+  const El=Object.values(res.lignes).filter(x=>x.p&&!x.p.a);
+  const cls=[...new Set(El.map(x=>x.p.c))].sort((a,b)=>'6543'.indexOf(niveauDe(a))-'6543'.indexOf(niveauDe(b))||a.localeCompare(b,'fr',{numeric:true}));
+  const rangCl={}; for(const id in cfg.courses) for(const n of niveauxPresents(cfg,id,res.classes))
+    res.classes.filter(c=>c.course===id&&c.niv===n).forEach((c,i,arr)=>rangCl[c.c]=(i+1)+' / '+arr.length);
+  const rangCo={}; for(const id in cfg.courses) res.classes.filter(c=>c.course===id).forEach((c,i,arr)=>rangCo[c.c]=(i+1)+' / '+arr.length);
+  const syn=[['Classe','Rang dans le niveau','Rang dans la course','Moyenne (tours / élève)','Tours élèves','Tours adultes','Élèves ayant couru','Inscrits','Km','Meilleur tour de la classe']];
+  for(const c of cls){
+    const C=res.classes.find(x=>x.c===c)||{moy:0,te:0,ta:0,coureurs:0,inscrits:0,km:0};
+    const L=trierIndiv(El.filter(x=>x.p.c===c&&!x.p.st)), R=rangsIndiv(L);
+    const best=L.filter(x=>x.best!=null).sort((a,b)=>a.best-b.best)[0];
+    syn.push([c,rangCl[c]||'',rangCo[c]||'',Math.round(C.moy*100)/100,C.te,C.ta,C.coureurs,C.inscrits,Math.round(C.km*10)/10,best?mmss(best.best)+' ('+(nomDe(noms,best)||'n° '+best.d)+')':'']);
+    const rows=[['Classe '+c+' — '+(cfg.titre||'Cross')],
+      ['Moyenne de la classe',Math.round(C.moy*100)/100,'tours par élève','Rang dans le niveau',rangCl[c]||'','Rang dans la course',rangCo[c]||''],[],
+      ['Rang','Dossard','Nom','Prénom','Sexe','Groupe','Type de groupe','Tours','Km','Meilleur tour','Tour moyen','Premier passage','Dernier passage']];
+    L.forEach((x,i)=>{ const n=noms[x.d]||{};
+      rows.push([R[i],x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.g||'',x.p.ty?TYPES[x.p.ty]:'',x.tours,Math.round(x.tours*cfg.boucle*100)/100,
+        mmss(x.best),mmss(x.moy),fmtHeure(x.first),fmtHeure(x.last)]); });
+    const st=El.filter(x=>x.p.c===c&&x.p.st);
+    if(st.length){ rows.push([],['Absents ou dispensés']);
+      st.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.g||'',x.p.st==='dispense'?'dispensé':'absent']); }); }
+    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[6,8,20,14,6,8,12,7,7,12,11,14,14].map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb,ws,String(c).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31));
+  }
+  const ws=XLSX.utils.aoa_to_sheet(syn); ws['!cols']=[8,18,18,20,12,12,16,8,8,30].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws,'Synthèse');
+  wb.SheetNames.unshift(wb.SheetNames.pop());          // la synthèse en premier
+  const d=new Date();
+  XLSX.writeFile(wb,'cross-par-classe-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.xlsx');
 }
 
 // ---------------------------------------------------------------- export Excel
