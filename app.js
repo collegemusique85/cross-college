@@ -468,12 +468,12 @@ export function niveauLycee(classe){ const c=String(classe||'').trim().toUpperCa
   return c[0]||'?'; }
 export const ORDRE_LYCEE=['2','1','T','3PM'];
 // Rangs général, par sexe, par niveau et sexe, par classe et sexe (ordre des premiers passages).
-// La 3PM a son propre classement : elle ne compte pas dans le classement général du lycée.
+// La 3PM compte dans le classement général du lycée et a aussi son propre classement (son « niveau »).
 export function classementLycee(res,id){
   const A=(res.arrivees[id]||{arrives:[],inscrits:0}).arrives, cpt={};
   const inc=k=>cpt[k]=(cpt[k]||0)+1;
-  return A.map(x=>{ const s=x.p.s||'?', n=niveauLycee(x.p.c), g=n==='3PM'?'3PM':'LYC';
-    return {...x,niv:n,groupe:g,rang:inc('g'+g),rangSexe:x.p.s?inc('s'+g+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
+  return A.map(x=>{ const s=x.p.s||'?', n=niveauLycee(x.p.c);
+    return {...x,niv:n,rang:inc('g'),rangSexe:x.p.s?inc('s'+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
 }
 export function statsLycee(L){
   const st=T=>{ const t=T.map(x=>x.temps).filter(v=>v!=null); return {n:T.length,best:t.length?Math.min(...t):null,moy:t.length?t.reduce((a,b)=>a+b,0)/t.length:null}; };
@@ -482,13 +482,13 @@ export function statsLycee(L){
 export function exportLyceeCSV(res,noms,id){
   const cfg=res.cfg, L=classementLycee(res,id), vu=new Set(L.map(x=>x.d));
   const q=v=>{ v=v==null?'':String(v); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const lig=[['Classement','Rang général','Rang filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
+  const lig=[['Rang général','Rang filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
   for(const x of L){ const n=noms[x.d]||{};
-    lig.push([x.groupe==='3PM'?'3PM':'Lycée',x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
+    lig.push([x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
   const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&courseDe(cfg,x.p)===id&&!vu.has(x.d))
     .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
   for(const x of autres){ const n=noms[x.d]||{};
-    lig.push([niveauLycee(x.p.c)==='3PM'?'3PM':'Lycée','','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
+    lig.push(['','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
   const d=new Date();
   download('cross-lycee-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.csv',lig.map(r=>r.map(q).join(';')).join('\r\n'));
 }
@@ -503,7 +503,7 @@ export function exportLyceeParClasse(res,noms,id){
     const A=L.filter(x=>x.p.c===c), S=statsLycee(A), ins=El.filter(x=>x.p.c===c&&!x.p.st).length;
     syn.push([c,libNivLycee(niveauLycee(c)),ins,A.length,S.F.n,S.G.n,S.F.best!=null?fmtChrono(S.F.best):'',S.G.best!=null?fmtChrono(S.G.best):'',S.T.moy!=null?fmtChrono(S.T.moy):'']);
     const rows=[['Classe '+c+' — '+(cfg.titre||'Cross')+' (classement à l\'arrivée)'],[],
-      ['Rang classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Rang filles/garçons ('+(niveauLycee(c)==='3PM'?'3PM':'lycée')+')','Rang niveau (même sexe)','Heure d\'arrivée']];
+      ['Rang classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Rang filles/garçons (lycée)','Rang '+libNivLycee(niveauLycee(c))+' (même sexe)','Heure d\'arrivée']];
     for(const x of A){ const n=noms[x.d]||{}; rows.push([x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',x.rangSexe||'',x.rangNiv||'',fmtHeure(x.first)]); }
     const vus=new Set(A.map(x=>x.d)), reste=El.filter(x=>x.p.c===c&&!vus.has(x.d));
     if(reste.length){ rows.push([],['Non arrivés, absents ou dispensés']);

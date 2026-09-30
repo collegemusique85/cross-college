@@ -121,8 +121,8 @@ function sections(){
 }
 const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A)
   :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
-// Section « Lycée » : tout le lycée sauf la 3PM, qui a son classement à part.
-const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id&&(sec.nivL?niveauLycee(p.c)===sec.nivL:niveauLycee(p.c)!=='3PM')
+// Section « Lycée » : tout le lycée, 3PM comprise (qui a aussi son bouton à part).
+const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id&&(!sec.nivL||niveauLycee(p.c)===sec.nivL)
   :sec.ids.includes(courseDe(res.cfg,p))&&sec.niv.includes(niveauDe(p.c)));
 const mm=ms=>ms==null?'—':fmtChrono(ms);
 const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
