@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001b">
+<link rel="stylesheet" href="style.css?v=20261001c">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -129,7 +129,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   </div>
 </div>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001b';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001c';
 
 navBar('direct.html',true);
 const store=await boot();
