@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001c">
+<link rel="stylesheet" href="style.css?v=20261001d">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -27,6 +27,9 @@
   .stat b{display:block;font-size:clamp(26px,3vw,50px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
   .stat span{font-size:clamp(12px,.95vw,15px);color:#9AA3AB;text-transform:uppercase;letter-spacing:.08em}
   .stat small{display:block;font-size:clamp(12px,.95vw,15px);color:#C9CED3;margin-top:2px;max-width:22ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* meilleurs tours : le nom du coureur bien visible, sur une ou deux lignes */
+  .stat.best small{font-size:clamp(15px,1.35vw,24px);font-weight:700;color:#fff;max-width:18ch;white-space:normal;line-height:1.15;margin-top:4px}
+  .stat.best small i{display:block;font-style:normal;font-weight:500;font-size:.72em;color:#9AA3AB}
   .stat.sep{border-left:1px solid #2B333B;padding-left:clamp(18px,3vw,56px)}
   .chrono.warn #chrono{color:var(--vest)}
   .chrono.over #chrono{color:#FF6B57;animation:blink 1s steps(2) infinite}
@@ -114,6 +117,8 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <label class="hint" id="vueW">Affichage <select id="vue"><option value="all">Toutes les classes</option><option value="niv">Par niveau</option></select></label>
     <button class="go" id="go" hidden>Donner le départ</button>
     <span class="hint" id="goHint"></span>
+    <input type="file" id="nomFile" accept=".xlsx,.xls,.csv" hidden>
+    <button class="ghost" id="nomBtn" title="Afficher les noms : ils restent sur cet ordinateur">Noms (Excel)…</button>
   </div>
   <header>
     <div class="ttl"><div class="k" id="kicker">En direct</div><h1 id="title">Cross du collège</h1></div>
@@ -128,15 +133,16 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <button class="ghost" id="fs">Plein écran</button>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001c';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001d';
 
 navBar('direct.html',true);
 const store=await boot();
 const S={participants:{},scans:{},corrections:{},config:{}};
 let tm=null, arme=null, armeT=null;
 const q=new URLSearchParams(location.search);
-const noms=getNoms(store.key);
+let noms=getNoms(store.key);
 store.onValue('participants',v=>{S.participants=v; later();});
 store.onValue('corrections',v=>{S.corrections=v; later();});
 store.onValue('config',v=>{S.config=v; later();});
@@ -205,10 +211,12 @@ function drawTours(res,cfg,cid,co){
   const cl=res.classes.filter(c=>c.course===cid);
   const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
   const M=res.meilleurs[cid]||{}, E=M.eleve, A=M.adulte;
-  const qui=L=>{ const p=L.p; if(p&&p.a) return esc(p.n||'Adulte n° '+L.d)+(p.cr?' · '+esc(p.cr):'');
-    if(!p) return 'Adulte n° '+L.d; const n=nomCourt(L.d); return (n?esc(n):'n° '+L.d)+' · '+esc(p.c); };
+  // Nom en évidence, puis classe et numéro en petit. Élèves : noms chargés sur cet ordinateur ; adultes : nom saisi dans Organisation.
+  const qui=L=>{ const p=L.p;
+    if(!p||p.a) return esc(p&&p.n||'Adulte')+'<i>n° '+L.d+(p&&p.cr?' · '+esc(p.cr):'')+'</i>';
+    const n=nomCourt(L.d); return (n?esc(n):'Dossard '+L.d)+'<i>'+esc(p.c)+(n?' · n° '+L.d:'')+'</i>'; };
   $('stats').innerHTML=stat(tours.toLocaleString('fr-FR'),'tours bouclés','sTours')+stat(fr1(tours*cfg.boucle),'kilomètres parcourus','sKm')+stat(run,'coureurs en piste','sRun')
-    +stat(E?fmtChrono(E.v):'—','meilleur tour élève','sBestE',E?qui(E.L):'',' sep')+stat(A?fmtChrono(A.v):'—','meilleur tour adulte','sBestA',A?qui(A.L):'');
+    +stat(E?fmtChrono(E.v):'—','meilleur tour élève','sBestE',E?qui(E.L):'',' sep best')+stat(A?fmtChrono(A.v):'—','meilleur tour adulte','sBestA',A?qui(A.L):'',' best');
 
   const pr=res.profs[cid]||{n:0,moy:0,total:0}, pm=pr.n?pr.moy:0;
   const max=Math.max(1,pm,...cl.map(c=>c.moy));
@@ -304,6 +312,17 @@ function tick(){
 setInterval(tick,1000);
 draw();
 
+// Charger les noms sur l'ordinateur de projection (fichier Excel des élèves ; rien n'est envoyé en ligne)
+$('nomBtn').onclick=()=>$('nomFile').click();
+$('nomFile').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  const {rows}=parseWorkbook(XLSX.read(await f.arrayBuffer()));
+  const r=prepareImport(rows,readCfg(S.config),S.participants||{});
+  const ids=Object.keys(r.parts), P=S.participants||{};
+  if(r.E.length||!ids.length||!ids.every(d=>P[d]&&P[d].c===r.parts[d].c)){ alert('Ce fichier ne correspond pas à la liste publiée : importez-le d\'abord dans Organisation.'); return; }
+  noms={...noms,...r.noms}; setNoms(store.key,noms); draw();
+  alert(ids.length+' noms chargés sur cet ordinateur.');
+};
 $('fs').onclick=()=>{ const d=document.documentElement; (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); };
 let idle; const wake=()=>{ document.body.classList.remove('idle'); clearTimeout(idle); idle=setTimeout(()=>document.body.classList.add('idle'),4000); };
 ['mousemove','touchstart','keydown'].forEach(e=>addEventListener(e,wake,{passive:true})); wake();
