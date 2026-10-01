@@ -225,7 +225,11 @@ export function compute(state){
       if(s.t-dernier>ABS){ laps.push(s.t); compte.add(s.id); }
       dernier=s.t;
     }
-    R[d]={laps,first,last,nScans:list.length,hors:hors.length};
+    // Scanné pendant la course d'un autre groupe : non compté, mais signalé (élèves seulement).
+    let mauvaise=null; const p0=P[d];
+    if(p0&&!p0.a) for(const s of hors){ const autre=Object.keys(win).find(id=>!ids.includes(id)&&s.t>=win[id].a&&s.t<=win[id].b);
+      if(autre){ mauvaise={course:autre,t:s.t,v:s.v||''}; break; } }
+    R[d]={laps,first,last,nScans:list.length,hors:hors.length,mauvaise};
   }
   const estAd=d=>{ const p=P[d]; return p?!!p.a:estAdulteNum(+d); };
   const corr={};
@@ -233,7 +237,7 @@ export function compute(state){
 
   const lignes={};
   for(const d of new Set([...Object.keys(P),...Object.keys(R)])){
-    const r=R[d]||{laps:[],first:null,last:null,nScans:0,hors:0}, p=P[d]||null;
+    const r=R[d]||{laps:[],first:null,last:null,nScans:0,hors:0,mauvaise:null}, p=P[d]||null;
     const iv=[]; for(let i=1;i<r.laps.length;i++) iv.push(r.laps[i]-r.laps[i-1]);
     const c=corr[d]||0;
     lignes[d]={ d:+d, p, ...r, iv, corr:c, tours:Math.max(0,r.laps.length+c),
@@ -275,7 +279,7 @@ export function compute(state){
   }).sort((a,b)=>b.moy-a.moy||b.total-a.total);
 
   // contrôle
-  const A={plafond:[],manquants:[],inconnus:[],adultesLibres:[],dispenses:[],zero:[],hors:0};
+  const A={plafond:[],manquants:[],inconnus:[],adultesLibres:[],dispenses:[],zero:[],hors:0,mauvaise:[]};
   for(const d in lignes){
     const L=lignes[d], p=L.p;
     if(L.tours>cfg.plafond-1&&L.tours>0) A.plafond.push(L);
@@ -284,6 +288,7 @@ export function compute(state){
     if(p&&p.st&&L.laps.length) A.dispenses.push(L);
     if(p&&!p.a&&!p.st){ const cid=courseDe(cfg,p); if(cid&&win[cid]&&L.tours===0) A.zero.push(L); }
     A.hors+=L.hors;
+    if(L.mauvaise) A.mauvaise.push(L);
     if(L.laps.length>=5){
       const s=[...L.iv].sort((a,b)=>a-b), med=s[Math.floor(s.length/2)];
       L.iv.forEach((v,i)=>{
@@ -468,6 +473,8 @@ export function trierIndiv(L){
 export function rangsIndiv(L){ let r=0,prev=null; return L.map((x,i)=>{ const k=x.tours+'|'+(x.moy==null?'':Math.floor(x.moy/1000));
   if(k!==prev){ r=i+1; prev=k; } return r; }); }
 export const mmss = ms => ms==null?'':fmtChrono(ms);
+// « Pas dans la bonne course » : libellé pour les tableaux et les exports.
+export const libMauvaise = (cfg,L) => L&&L.mauvaise?'pas dans la bonne course (scanné pendant « '+((cfg.courses[L.mauvaise.course]||{}).nom||'?')+' » à '+fmtHeure(L.mauvaise.t)+')':'';
 
 // ---------------------------------------------------------------- lycée : classements à l'arrivée
 export const NIV_LYCEE={'2':'2de','1':'1re','T':'Tle','3PM':'3PM'};
@@ -505,7 +512,7 @@ export function exportLyceeCSV(res,noms,ids){
   const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&ids.includes(courseDe(cfg,x.p))&&!vu.has(x.d))
     .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
   for(const x of autres){ const n=noms[x.d]||{}, co=cfg.courses[courseDe(cfg,x.p)];
-    lig.push([co?co.nom:'','','','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
+    lig.push([co?co.nom:'','','','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):x.mauvaise?libMauvaise(cfg,x):'non arrivé']); }
   const d=new Date();
   download('cross-lycee-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.csv',lig.map(r=>r.map(q).join(';')).join('\r\n'));
 }
@@ -524,8 +531,8 @@ export function exportLyceeParClasse(res,noms,ids){
       ['Course','Rang dans la course','Rang dans la classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Heure d\'arrivée']];
     for(const x of A){ const n=noms[x.d]||{}; rows.push([cfg.courses[x.course].nom,x.rangCourse,x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first)]); }
     const vus=new Set(A.map(x=>x.d)), reste=El.filter(x=>x.p.c===c&&!vus.has(x.d));
-    if(reste.length){ rows.push([],['Non arrivés, absents ou dispensés']);
-      reste.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['','','',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }); }
+    if(reste.length){ rows.push([],['Non classés : non arrivés, pas dans la bonne course, absents ou dispensés']);
+      reste.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['','','',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):x.mauvaise?libMauvaise(cfg,x):'non arrivé']); }); }
     const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[20,10,14,8,20,14,6,9,14].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb,ws,String(c).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31));
   }
@@ -546,7 +553,7 @@ export function exportParClasse(res,noms){
   const syn=[['Classe','Rang dans le niveau','Rang dans la course','Moyenne (tours / élève)','Tours élèves','Tours adultes','Élèves ayant couru','Inscrits','Km','Meilleur tour de la classe']];
   for(const c of cls){
     const C=res.classes.find(x=>x.c===c)||{moy:0,te:0,ta:0,coureurs:0,inscrits:0,km:0};
-    const L=trierIndiv(El.filter(x=>x.p.c===c&&!x.p.st)), R=rangsIndiv(L);
+    const L=trierIndiv(El.filter(x=>x.p.c===c&&!x.p.st&&!(x.mauvaise&&!x.tours))), R=rangsIndiv(L);
     const best=L.filter(x=>x.best!=null).sort((a,b)=>a.best-b.best)[0];
     syn.push([c,rangCl[c]||'',rangCo[c]||'',Math.round(C.moy*100)/100,C.te,C.ta,C.coureurs,C.inscrits,Math.round(C.km*10)/10,best?mmss(best.best)+' ('+(nomDe(noms,best)||'n° '+best.d)+')':'']);
     const rows=[['Classe '+c+' — '+(cfg.titre||'Cross')],
@@ -555,9 +562,9 @@ export function exportParClasse(res,noms){
     L.forEach((x,i)=>{ const n=noms[x.d]||{};
       rows.push([R[i],x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.g||'',x.p.ty?TYPES[x.p.ty]:'',x.tours,Math.round(x.tours*cfg.boucle*100)/100,
         mmss(x.best),mmss(x.moy),fmtHeure(x.first),fmtHeure(x.last)]); });
-    const st=El.filter(x=>x.p.c===c&&x.p.st);
-    if(st.length){ rows.push([],['Absents ou dispensés']);
-      st.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.g||'',x.p.st==='dispense'?'dispensé':'absent']); }); }
+    const st=El.filter(x=>x.p.c===c&&(x.p.st||(x.mauvaise&&!x.tours)));
+    if(st.length){ rows.push([],['Non classés : absents, dispensés ou pas dans la bonne course']);
+      st.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.g||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):libMauvaise(cfg,x)]); }); }
     const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[6,8,20,14,6,8,12,7,7,12,11,14,14].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb,ws,String(c).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31));
   }
@@ -579,7 +586,7 @@ export function exportWorkbook(res,state,noms){
   add('Par élève',[['Dossard','Nom','Classe','Sexe','Groupe','Type de groupe','Statut','Tours','Km',
     'Premier passage','Dernier passage','Du premier au dernier passage (min)','Meilleur tour (min)','Tour moyen (min)','Correction']]
     .concat(L.filter(x=>x.p&&!x.p.a).map(x=>[x.d,nomDe(noms,x),x.p.c,x.p.s||'',x.p.g||'',x.p.ty?TYPES[x.p.ty]:'',
-      x.p.st||'',x.tours,Math.round(x.tours*cfg.boucle*100)/100,fmtHeure(x.first),fmtHeure(x.last),min(x.span),
+      x.p.st||libMauvaise(cfg,x),x.tours,Math.round(x.tours*cfg.boucle*100)/100,fmtHeure(x.first),fmtHeure(x.last),min(x.span),
       min(x.best),min(x.moy),x.corr||''])),[8,24,8,6,8,12,10,7,7,12,12,14,12,12,10]);
 
   const cl=[['Course','Niveau','Rang','Classe','Moyenne (tours / élève)','Tours élèves','Tours adultes','Total','Élèves ayant couru','Inscrits','Km']];
@@ -617,6 +624,7 @@ export function exportWorkbook(res,state,noms){
   A.adultesLibres.forEach(x=>ct.push(['Dossard adulte non attribué',x.d,x.tours+' tour(s)']));
   A.dispenses.forEach(x=>ct.push(['Dispensé ou absent scanné',x.d,x.laps.length+' passage(s)']));
   A.zero.forEach(x=>ct.push(['Aucun tour',x.d,(x.p&&x.p.c)||'']));
+  A.mauvaise.forEach(x=>ct.push(['Scanné pendant une autre course',x.d,(x.p&&x.p.c||'')+' — '+libMauvaise(cfg,x)]));
   Object.values(state.corrections||{}).forEach(c=>{ if(c&&c.delta) ct.push(['Correction manuelle',c.d,(c.delta>0?'+':'')+c.delta+' — '+(c.raison||'')+' ('+fmtHeure(c.t)+')']); });
   add('Contrôle',ct,[26,8,70]);
 

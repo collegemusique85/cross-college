@@ -149,7 +149,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe} from './app.js';
 
 navBar('admin.html');
 const store=await boot();
@@ -245,6 +245,10 @@ function drawControl(){
       <button class="btn small" data-ref="${m.key}" data-d="${m.L.d}">Non</button></td></tr>`).join('')+'</table></div>');
   if(A.plafond.length) blocs.push('<h3 style="margin:14px 0 6px">Nombre de tours à vérifier <span class="tag r">'+A.plafond.length+'</span></h3><table class="t">'+
     A.plafond.map(L=>`<tr><td>${ligne(L)}</td><td>${L.tours} tours ${L.tours>cfg.plafond?'<span class="tag r">au-delà du plafond</span>':'<span class="tag o">au plafond</span>'}</td></tr>`).join('')+'</table>');
+  if(A.mauvaise.length) blocs.push('<h3 style="margin:14px 0 6px">Scannés pendant une autre course <span class="tag r">'+A.mauvaise.length+'</span></h3>'+
+    '<p class="small muted">Ces passages ne comptent pas : l\'élève reste dans les classements de sa course, marqué « pas dans la bonne course ». La tablette a affiché un écran rouge.</p><table class="t">'+
+    A.mauvaise.sort((a,b)=>b.mauvaise.t-a.mauvaise.t).map(L=>`<tr><td>${ligne(L)}</td><td class="small">sa course : ${esc((cfg.courses[courseDe(cfg,L.p)]||{}).nom||'—')}</td>
+      <td class="small">scanné pendant « ${esc((cfg.courses[L.mauvaise.course]||{}).nom||'?')} » à ${fmtHeure(L.mauvaise.t)}${L.mauvaise.v?' · '+esc(L.mauvaise.v):''}</td></tr>`).join('')+'</table>');
   if(A.adultesLibres.length) blocs.push('<h3 style="margin:14px 0 6px">Dossards adultes pas encore attribués <span class="tag o">'+A.adultesLibres.length+'</span></h3><p class="small">'+
     A.adultesLibres.map(L=>`<button class="btn small" data-adult="${L.d}">${L.d} · ${L.tours} tour${L.tours>1?'s':''}</button>`).join(' ')+'</p>');
   if(A.inconnus.length) blocs.push('<h3 style="margin:14px 0 6px">Numéros scannés absents de la liste <span class="tag r">'+A.inconnus.length+'</span></h3><p class="small">'+

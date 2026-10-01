@@ -24,6 +24,7 @@
   #flood.on{display:flex}
   #flood b{font-size:min(34vw,34vh);font-weight:800;letter-spacing:-.04em;line-height:.9;font-variant-numeric:tabular-nums}
   #flood span{font-size:22px;font-weight:600;opacity:.75;margin-top:10px}
+  #flood.warn span{opacity:1;font-size:26px;font-weight:800;text-align:center;padding:0 24px;max-width:90vw}
 
   #topbar{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:10px;
     padding:calc(10px + env(safe-area-inset-top)) 14px 22px;background:linear-gradient(#000C,#0000)}
@@ -295,12 +296,30 @@ $('undoBtn').onclick=()=>{
   if(P[d]&&P[d].st==='absent') store.update({['participants/'+d+'/st']:null});
   flash(d,'annulé : l\'élève participe','same',1400);
 };
+// L'élève appartient-il à une course qui n'est pas celle en cours ? (le passage est enregistré mais ne comptera pas)
+function horsCourse(d){
+  const p=P[d]; if(!p||p.a) return null;
+  const run=cfg.ordre.filter(id=>cfg.courses[id].debut&&!cfg.courses[id].fin);
+  if(!run.length) return null;                       // aucune course en cours (échauffement, test) : pas d'alerte
+  const cid=courseDe(cfg,p);
+  return run.includes(cid)?null:((cfg.courses[cid]||{}).nom||'aucune course');
+}
+function errBeep(){
+  if(!audio) return; const t0=audio.currentTime;
+  for(const [f,s,e] of [[330,0,.16],[220,.2,.4]]){ const o=audio.createOscillator(), g=audio.createGain();
+    o.type='square'; o.frequency.value=f; o.connect(g); g.connect(audio.destination);
+    g.gain.setValueAtTime(.0001,t0+s); g.gain.exponentialRampToValueAtTime(.9,t0+s+.01); g.gain.setValueAtTime(.9,t0+e-.02); g.gain.exponentialRampToValueAtTime(.0001,t0+e);
+    o.start(t0+s); o.stop(t0+e+.01); }
+}
 function record(d,mode){
   if(ABS) return recordAbs(d);
   Q.add({id:uid(),d,t:store.now(),v:devName(),m:mode});
-  $('floodNum').textContent=d; $('floodSub').textContent=describe(d);
-  FLOOD.classList.add('on'); beep(); setTimeout(()=>speak(d),190);
-  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.classList.remove('on'),450);
+  const autre=horsCourse(d);
+  $('floodNum').textContent=d;
+  $('floodSub').textContent=autre?'PAS DANS CETTE COURSE · '+(P[d].c||'')+' court en « '+autre+' »':describe(d);
+  FLOOD.className=autre?'on warn':'on';
+  if(autre) errBeep(); else { beep(); setTimeout(()=>speak(d),190); }
+  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.className='',autre?2200:450);
   countLabel();
 }
 function onHit(text){
