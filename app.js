@@ -484,10 +484,11 @@ export function classementLycee(res,ids){
   ids=[].concat(ids||idsLycee(res.cfg));
   // Plusieurs départs : on classe au temps de course ; à égalité, à l'heure d'arrivée.
   const v=x=>x==null?Infinity:x;
-  const A=ids.flatMap(id=>(res.arrivees[id]||{arrives:[]}).arrives).sort((a,b)=>v(a.temps)-v(b.temps)||a.first-b.first), cpt={};
+  const A=ids.flatMap(id=>(res.arrivees[id]||{arrives:[]}).arrives.map(x=>({...x,course:id}))).sort((a,b)=>v(a.temps)-v(b.temps)||a.first-b.first), cpt={};
   const inc=k=>cpt[k]=(cpt[k]||0)+1;
+  // rangCourse : le classement officiel (une course = un départ) ; les autres rangs servent aux exports.
   return A.map(x=>{ const s=x.p.s||'?', n=niveauLycee(x.p.c);
-    return {...x,niv:n,rang:inc('g'),rangSexe:x.p.s?inc('s'+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
+    return {...x,niv:n,rangCourse:inc('k'+x.course),rang:inc('g'),rangSexe:x.p.s?inc('s'+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
 }
 export function statsLycee(L){
   const st=T=>{ const t=T.map(x=>x.temps).filter(v=>v!=null); return {n:T.length,best:t.length?Math.min(...t):null,moy:t.length?t.reduce((a,b)=>a+b,0)/t.length:null}; };
@@ -497,13 +498,14 @@ export function exportLyceeCSV(res,noms,ids){
   ids=[].concat(ids||idsLycee(res.cfg));
   const cfg=res.cfg, L=classementLycee(res,ids), vu=new Set(L.map(x=>x.d));
   const q=v=>{ v=v==null?'':String(v); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const lig=[['Rang général','Rang filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
+  // Fichier « tout le lycée » : trié au temps, avec le rang dans sa course et les rangs sur tout le lycée.
+  const lig=[['Course','Rang dans la course','Rang lycée (tous)','Rang lycée filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
   for(const x of L){ const n=noms[x.d]||{};
-    lig.push([x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
+    lig.push([cfg.courses[x.course].nom,x.rangCourse,x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
   const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&ids.includes(courseDe(cfg,x.p))&&!vu.has(x.d))
     .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
-  for(const x of autres){ const n=noms[x.d]||{};
-    lig.push(['','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
+  for(const x of autres){ const n=noms[x.d]||{}, co=cfg.courses[courseDe(cfg,x.p)];
+    lig.push([co?co.nom:'','','','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
   const d=new Date();
   download('cross-lycee-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'.csv',lig.map(r=>r.map(q).join(';')).join('\r\n'));
 }
@@ -519,12 +521,12 @@ export function exportLyceeParClasse(res,noms,ids){
     const A=L.filter(x=>x.p.c===c), S=statsLycee(A), ins=El.filter(x=>x.p.c===c&&!x.p.st).length;
     syn.push([c,libNivLycee(niveauLycee(c)),ins,A.length,S.F.n,S.G.n,S.F.best!=null?fmtChrono(S.F.best):'',S.G.best!=null?fmtChrono(S.G.best):'',S.T.moy!=null?fmtChrono(S.T.moy):'']);
     const rows=[['Classe '+c+' — '+(cfg.titre||'Cross')+' (classement à l\'arrivée)'],[],
-      ['Rang classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Rang filles/garçons (lycée)','Rang '+libNivLycee(niveauLycee(c))+' (même sexe)','Heure d\'arrivée']];
-    for(const x of A){ const n=noms[x.d]||{}; rows.push([x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',x.rangSexe||'',x.rangNiv||'',fmtHeure(x.first)]); }
+      ['Course','Rang dans la course','Rang dans la classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Heure d\'arrivée']];
+    for(const x of A){ const n=noms[x.d]||{}; rows.push([cfg.courses[x.course].nom,x.rangCourse,x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first)]); }
     const vus=new Set(A.map(x=>x.d)), reste=El.filter(x=>x.p.c===c&&!vus.has(x.d));
     if(reste.length){ rows.push([],['Non arrivés, absents ou dispensés']);
-      reste.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }); }
-    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[12,8,20,14,6,9,16,14,14].map(w=>({wch:w}));
+      reste.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['','','',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }); }
+    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[20,10,14,8,20,14,6,9,14].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb,ws,String(c).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31));
   }
   const ws=XLSX.utils.aoa_to_sheet(syn); ws['!cols']=[10,8,9,9,14,15,20,22,12].map(w=>({wch:w}));

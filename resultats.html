@@ -71,7 +71,7 @@
       <input type="file" id="nameFile" accept=".xlsx,.xls,.csv" hidden>
       <button class="ghost" id="xls">Tous les résultats (Excel)</button>
       <button class="ghost" id="xlsCl">Résultats par classe, pour l'EPS (Excel)</button>
-      <button class="ghost" id="csvLy" hidden>Résultats du lycée (CSV)</button>
+      <button class="ghost" id="csvLy" hidden>Tout le lycée (CSV)</button>
       <button class="ghost" id="xlsLyCl" hidden>Lycée par classe (Excel)</button>
     </div>
     <span id="net" class="pill"><i></i><span>…</span></span>
@@ -105,11 +105,10 @@ const kLab=n=>/^\d$/.test(n)?n+'e':n;
 // Sections : chaque niveau, chaque course (niveaux confondus), puis le lycée.
 function sections(){
   const cfg=res.cfg, niv=[], comb=[], lyc=[], LY=idsLycee(cfg);
-  // Lycée : toutes ses courses (2 départs par niveau) forment un seul classement, au temps.
-  if(LY.length){ lyc.push({k:'lyc',ids:LY,arr:true,lab:'Lycée'});
-    const N=[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&LY.includes(courseDe(cfg,p))).map(p=>niveauLycee(p.c)))]
-      .sort((a,b)=>(ORDRE_LYCEE.indexOf(a)+99)%99-(ORDRE_LYCEE.indexOf(b)+99)%99);
-    for(const n of N) lyc.push({k:'lyc:'+n,ids:LY,arr:true,nivL:n,lab:esc(libNivLycee(n))}); }
+  // Lycée : un classement par course (un départ = une course), plus la 3PM à part.
+  for(const id of LY){ const co=cfg.courses[id]; lyc.push({k:'lyc:'+id,ids:[id],arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Lycée')}); }
+  if(Object.values(S.participants||{}).some(p=>p&&!p.a&&LY.includes(courseDe(cfg,p))&&niveauLycee(p.c)==='3PM'))
+    lyc.push({k:'lyc:3PM',ids:LY,arr:true,nivL:'3PM',lab:'3PM'});
   for(const [id,co] of coursesOrdonnees(cfg)){
     if(estArrivee(co)) continue;
     const N=[...new Set([...niveauxDe(co).filter(n=>n!=='*').map(n=>n.toUpperCase()[0]),...niveauxPresents(cfg,id,res.classes)])];
@@ -119,7 +118,8 @@ function sections(){
   if(!lyc.length) lyc.push({k:'lycee',vide:true,lab:'Lycée'});
   return [...niv,...comb,...lyc];
 }
-const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?CATS_A
+// Lycée : une course = un sexe ; la 3PM (filles 2 tours, garçons 3 tours) n'a pas de classement mixte.
+const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A.filter(c=>c[0]!=='S'))
   :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
 // Section « Lycée » : tout le lycée, 3PM comprise (qui a aussi son bouton à part).
 const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?sec.ids.includes(courseDe(res.cfg,p))&&(!sec.nivL||niveauLycee(p.c)===sec.nivL)
@@ -137,8 +137,8 @@ function liste(sec){
     const S2=statsLycee(A.filter(x=>!fcl||x.p.c===fcl)), ins=Object.values(res.lignes).filter(x=>dansSec(sec,x.p)&&!x.p.st&&(!fcl||x.p.c===fcl)).length;
     const f=(k,l)=>S2[k].n?l+' : '+S2[k].n+' arrivé'+(k==='F'?'e':'')+'s · meilleur temps '+fmtChrono(S2[k].best)+' · temps moyen '+fmtChrono(S2[k].moy):'';
     const note=[f('F','Filles'),f('G','Garçons'),(ins-A.filter(x=>!fcl||x.p.c===fcl).length>0?(ins-A.filter(x=>!fcl||x.p.c===fcl).length)+' pas encore arrivé(s)':'')].filter(Boolean).join('  —  ');
-    return {cols:['Rang','Coureur','Temps','Classe','Rang général'],note,rows:L.map((x,i)=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
-      rang:i+1,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d,x.rang]}))};
+    return {cols:['Rang','Coureur','Temps','Classe'],note,rows:L.map((x,i)=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
+      rang:i+1,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d]}))};
   }
   const pr=sec.ids.map(id=>res.profs[id]).find(p=>p&&p.n), pm=pr?pr.moy:0;
   if(cat==='C'){
@@ -232,8 +232,9 @@ $('nameFile').onchange=async e=>{
 };
 $('xls').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
 $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
-$('xlsLyCl').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeParClasse(res,noms,sec.ids); };
-$('csvLy').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeCSV(res,noms,sec.ids); };
+// Les exports du lycée portent toujours sur toutes ses courses.
+$('xlsLyCl').onclick=()=>{ if(res) exportLyceeParClasse(res,noms,idsLycee(res.cfg)); };
+$('csvLy').onclick=()=>{ if(res) exportLyceeCSV(res,noms,idsLycee(res.cfg)); };
 </script>
 </body>
 </html>
