@@ -80,7 +80,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,trierIndiv,rangsIndiv,LS,navBar} from './app.js';
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,LS,navBar} from './app.js';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -104,25 +104,25 @@ const kLab=n=>/^\d$/.test(n)?n+'e':n;
 
 // Sections : chaque niveau, chaque course (niveaux confondus), puis le lycée.
 function sections(){
-  const cfg=res.cfg, niv=[], comb=[], lyc=[];
-  for(const id in cfg.courses){ const co=cfg.courses[id];
-    if(estArrivee(co)){ lyc.push({k:'a:'+id,id,arr:true,sexe:co.sexe||'',lab:esc(co.nom||'Lycée')});
-      const N=[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&courseDe(cfg,p)===id).map(p=>niveauLycee(p.c)))]
-        .sort((a,b)=>(ORDRE_LYCEE.indexOf(a)+99)%99-(ORDRE_LYCEE.indexOf(b)+99)%99);
-      for(const n of N) lyc.push({k:'a:'+id+':'+n,id,arr:true,sexe:co.sexe||'',nivL:n,lab:esc(libNivLycee(n))});
-      continue; }
+  const cfg=res.cfg, niv=[], comb=[], lyc=[], LY=idsLycee(cfg);
+  // Lycée : toutes ses courses (2 départs par niveau) forment un seul classement, au temps.
+  if(LY.length){ lyc.push({k:'lyc',ids:LY,arr:true,lab:'Lycée'});
+    const N=[...new Set(Object.values(S.participants||{}).filter(p=>p&&!p.a&&LY.includes(courseDe(cfg,p))).map(p=>niveauLycee(p.c)))]
+      .sort((a,b)=>(ORDRE_LYCEE.indexOf(a)+99)%99-(ORDRE_LYCEE.indexOf(b)+99)%99);
+    for(const n of N) lyc.push({k:'lyc:'+n,ids:LY,arr:true,nivL:n,lab:esc(libNivLycee(n))}); }
+  for(const [id,co] of coursesOrdonnees(cfg)){
+    if(estArrivee(co)) continue;
     const N=[...new Set([...niveauxDe(co).filter(n=>n!=='*').map(n=>n.toUpperCase()[0]),...niveauxPresents(cfg,id,res.classes)])];
     for(const n of N) niv.push({k:'n:'+id+':'+n,ids:[id],niv:[n],lab:libNiveau(n)});
     if(N.length>1) comb.push({k:'c:'+id,ids:[id],niv:N,comb:true,lab:N.map(kLab).join('-')});
   }
   if(!lyc.length) lyc.push({k:'lycee',vide:true,lab:'Lycée'});
-  if(lyc.filter(x=>!x.nivL).length===1&&!lyc[0].vide) lyc[0].lab='Lycée';
   return [...niv,...comb,...lyc];
 }
-const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A)
+const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?CATS_A
   :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
 // Section « Lycée » : tout le lycée, 3PM comprise (qui a aussi son bouton à part).
-const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?courseDe(res.cfg,p)===sec.id&&(!sec.nivL||niveauLycee(p.c)===sec.nivL)
+const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?sec.ids.includes(courseDe(res.cfg,p))&&(!sec.nivL||niveauLycee(p.c)===sec.nivL)
   :sec.ids.includes(courseDe(res.cfg,p))&&sec.niv.includes(niveauDe(p.c)));
 const mm=ms=>ms==null?'—':fmtChrono(ms);
 const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
@@ -132,7 +132,7 @@ function liste(sec){
   const cfg=res.cfg, cat=st.cat, fcl=st.cl;
   if(sec.arr){
     // ordre d'arrivée ; le rang est recalculé dans la sélection (niveau, classe, sexe)
-    const A=classementLycee(res,sec.id).filter(x=>dansSec(sec,x.p));
+    const A=classementLycee(res,sec.ids).filter(x=>dansSec(sec,x.p));
     let L=cat==='S'?A:A.filter(x=>x.p.s===cat); if(fcl) L=L.filter(x=>x.p.c===fcl);
     const S2=statsLycee(A.filter(x=>!fcl||x.p.c===fcl)), ins=Object.values(res.lignes).filter(x=>dansSec(sec,x.p)&&!x.p.st&&(!fcl||x.p.c===fcl)).length;
     const f=(k,l)=>S2[k].n?l+' : '+S2[k].n+' arrivé'+(k==='F'?'e':'')+'s · meilleur temps '+fmtChrono(S2[k].best)+' · temps moyen '+fmtChrono(S2[k].moy):'';
@@ -232,8 +232,8 @@ $('nameFile').onchange=async e=>{
 };
 $('xls').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
 $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
-$('xlsLyCl').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeParClasse(res,noms,sec.id); };
-$('csvLy').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeCSV(res,noms,sec.id); };
+$('xlsLyCl').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeParClasse(res,noms,sec.ids); };
+$('csvLy').onclick=()=>{ const sec=sections().find(x=>x.k===st.sec); if(res&&sec&&sec.arr) exportLyceeCSV(res,noms,sec.ids); };
 </script>
 </body>
 </html>

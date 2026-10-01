@@ -141,7 +141,7 @@ store.onScanAdded(s=>{ S.scans[s.id]=s; later(); });
 store.onConnected(c=>{ const n=$('net'); n.className='pill '+(c?'ok':'off'); n.querySelector('span').textContent=c?'en ligne':'hors ligne'; });
 
 function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; draw(); },700); }
-const courseId=cfg=>{ const w=q.get('course'); return (w&&cfg.courses[w])?w:(cfg.courses[cfg.courant]?cfg.courant:Object.keys(cfg.courses)[0]); };
+const courseId=cfg=>{ const w=q.get('course'); return (w&&cfg.courses[w])?w:(cfg.courses[cfg.courant]?cfg.courant:cfg.ordre[0]); };
 const nomCourt=d=>{ const n=noms[d]; return n?((n.prenom||'')+' '+(n.nom||'')).trim():''; };
 const stat=(v,l,id,sub,cls)=>`<div class="stat${cls?' '+cls:''}"><b${id?' id="'+id+'"':''}>${v}</b><span>${l}</span>${sub!=null?'<small>'+sub+'</small>':''}</div>`;
 let VUE=LS.get('cross.direct.vue','all')||'all';
@@ -159,7 +159,7 @@ function draw(){
 
 // ---------- commandes : course affichée + départ / fin, sans passer par Organisation
 function controls(cfg,cid,co){
-  const sel=$('coSel'), ids=Object.keys(cfg.courses);
+  const sel=$('coSel'), ids=cfg.ordre;
   const h=ids.map(id=>`<option value="${esc(id)}"${id===cid?' selected':''}>${esc(cfg.courses[id].nom||'Course '+id)}${cfg.courses[id].debut&&!cfg.courses[id].fin?' · en cours':''}</option>`).join('');
   if(sel.innerHTML!==h) sel.innerHTML=h;
   $('vueW').hidden=estArrivee(co);

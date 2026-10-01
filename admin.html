@@ -116,7 +116,7 @@
     <div class="grid2" id="cCourses" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button><button class="btn" id="cAdd">+ Ajouter une course</button></div>
     <div class="row" style="margin-top:10px;align-items:center"><span class="small muted">Préréglages :</span>
-      <button class="btn small" data-preset="journee">Journée : lycée (arrivée), puis 6<sup>e</sup>-5<sup>e</sup> et 4<sup>e</sup>-3<sup>e</sup> (45 min aux tours)</button></div>
+      <button class="btn small" data-preset="journee">Journée : lycée (6 départs, à l'arrivée), puis 6<sup>e</sup>-5<sup>e</sup> et 4<sup>e</sup>-3<sup>e</sup> (45 min aux tours)</button></div>
     <p class="small muted" style="margin-top:10px">Le lycée et le collège partagent le même événement : dossards du lycée à partir de 1001, du collège à partir de 1, adultes de 901 à 950. Chaque liste peut être importée séparément sans effacer l'autre.</p>
   </details>
 
@@ -149,7 +149,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee} from './app.js';
 
 navBar('admin.html');
 const store=await boot();
@@ -170,7 +170,7 @@ function drawAll(){ drawCourses(); drawControl(); drawAdults(); drawStats(); dra
 function drawCourses(){
   const cfg=res.cfg;
   $('h1').textContent=cfg.titre||'Organisation du cross';
-  $('courses').innerHTML=Object.entries(cfg.courses).map(([id,c])=>{
+  $('courses').innerHTML=coursesOrdonnees(cfg).map(([id,c])=>{
     const cl=res.classes.filter(x=>x.course===id);
     const tours=cl.reduce((a,x)=>a+x.total,0), run=cl.reduce((a,x)=>a+x.coureurs+x.adultes,0);
     const AR=res.arrivees[id];
@@ -405,7 +405,7 @@ function fillCfg(){
   if(cfgFilled&&ae&&ae.matches('input,select,textarea')&&ae.closest('details')) return;
   const c=readCfg(S.config);
   $('cTitre').value=c.titre; $('cBoucle').value=String(c.boucle).replace('.',','); $('cAbs').value=c.absence; $('cPlaf').value=c.plafond; $('cDelai').value=c.delai;
-  $('cCourses').innerHTML=Object.entries(c.courses).map(([id,x])=>`<div class="card cc" style="margin:0">
+  $('cCourses').innerHTML=coursesOrdonnees(c).map(([id,x])=>`<div class="card cc" style="margin:0">
     <div class="row" style="justify-content:space-between"><b>Course ${esc(id)}</b><button class="btn small danger" data-cdel="${esc(id)}">Supprimer</button></div>
     <label>Nom <input data-cn="${esc(id)}" value="${esc(x.nom)}"></label>
     <label>Niveaux (6,5 · 2,1,T · * = toutes) <input data-cv="${esc(id)}" value="${esc(x.niveaux)}"></label>
@@ -425,13 +425,19 @@ $('cAdd').onclick=()=>{ const ids=Object.keys({...readCfg({}).courses,...(S.conf
   const id=String(Math.max(0,...ids)+1);
   store.update({['config/courses/'+id]:{nom:'Course '+id,niveaux:'',type:'tours'}}).then(()=>{ cfgFilled=false; fillCfg(); }); };
 const PRESETS={
-  journee:{titre:'Cross Saint-Gabriel',courses:{'0':{nom:'Lycée',niveaux:'2,1,T,CAP,3PM',type:'arrivee',duree:0},'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours',duree:45},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours',duree:45}}}
+  journee:{titre:'Cross Saint-Gabriel',courses:{'0':{off:true},
+    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'F',type:'arrivee',duree:0,ordre:.1},
+    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'G',type:'arrivee',duree:0,ordre:.2},
+    'L3':{nom:'1re - CAP2 filles',niveaux:'1,CAPC2,CAPE2',sexe:'F',type:'arrivee',duree:0,ordre:.3},
+    'L4':{nom:'1re - CAP2 garçons',niveaux:'1,CAPC2,CAPE2',sexe:'G',type:'arrivee',duree:0,ordre:.4},
+    'L5':{nom:'Terminales filles',niveaux:'T',sexe:'F',type:'arrivee',duree:0,ordre:.5},
+    'L6':{nom:'Terminales garçons',niveaux:'T',sexe:'G',type:'arrivee',duree:0,ordre:.6},'1':{nom:'Course 6e-5e',niveaux:'6,5',type:'tours',duree:45},'2':{nom:'Course 4e-3e',niveaux:'4,3',type:'tours',duree:45}}}
 };
 document.querySelector('details.card').addEventListener('click',e=>{ const b=e.target.closest('[data-preset]'); if(!b) return;
   const cur=readCfg(S.config);
   if(Object.values(cur.courses).some(c=>c.debut)&&!confirm('Une course a déjà un départ. Remplacer quand même les courses ? Les heures de départ seront effacées ; les passages scannés sont conservés.')) return;
   if(!confirm('Remplacer le titre et les courses par le préréglage « '+b.textContent+' » ?')) return;
-  const P=PRESETS[b.dataset.preset], u={'config/titre':P.titre,'config/courant':'1'};
+  const P=PRESETS[b.dataset.preset], u={'config/titre':P.titre,'config/courant':'L1'};
   const ids=new Set([...Object.keys(readCfg({}).courses),...Object.keys(S.config.courses||{})]);
   for(const id of ids) u['config/courses/'+id]=P.courses[id]?{...P.courses[id]}:{off:true};
   for(const id in P.courses) u['config/courses/'+id]={...P.courses[id]};
@@ -469,10 +475,10 @@ $('csvFile').onchange=async e=>{
 };
 $('xlsOut').onclick=()=>{ if(res) exportWorkbook(res,S,noms); };
 $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
-$('xlsLyCl').onclick=()=>{ if(!res) return; const id=Object.keys(res.cfg.courses).find(i=>estArrivee(res.cfg.courses[i]));
-  if(id) exportLyceeParClasse(res,noms,id); else alert('Aucune course du lycée dans les réglages.'); };
-$('csvLy').onclick=()=>{ if(!res) return; const id=Object.keys(res.cfg.courses).find(i=>estArrivee(res.cfg.courses[i]));
-  if(id) exportLyceeCSV(res,noms,id); else alert('Aucune course du lycée dans les réglages.'); };
+$('xlsLyCl').onclick=()=>{ if(!res) return; const L=idsLycee(res.cfg);
+  if(L.length) exportLyceeParClasse(res,noms,L); else alert('Aucune course du lycée dans les réglages.'); };
+$('csvLy').onclick=()=>{ if(!res) return; const L=idsLycee(res.cfg);
+  if(L.length) exportLyceeCSV(res,noms,L); else alert('Aucune course du lycée dans les réglages.'); };
 $('reset').onclick=()=>{
   const n=Object.keys(S.scans).length;
   const r=prompt('Effacer les '+n+' passages, les corrections, les horaires de course et la liste des tablettes ?\nLes participants, adultes et réglages sont conservés.\n\nTapez EFFACER pour confirmer.');

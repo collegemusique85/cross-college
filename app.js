@@ -130,7 +130,14 @@ export const DEFAULT_CFG = {
   delai:0,         // s : passages ignorés juste après le départ
   courant:'1',
   courses:{
-    '0':{nom:'Lycée',niveaux:'2,1,T,CAP,3PM',type:'arrivee',duree:0,debut:null,fin:null},
+    '0':{off:true},   // ancienne course unique du lycée, remplacée par les six courses ci-dessous
+    // Lycée : deux départs par niveau (filles puis garçons), classement à l'arrivée, avant le collège.
+    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'F',type:'arrivee',duree:0,ordre:.1,debut:null,fin:null},
+    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'G',type:'arrivee',duree:0,ordre:.2,debut:null,fin:null},
+    'L3':{nom:'1re - CAP2 filles',niveaux:'1,CAPC2,CAPE2',sexe:'F',type:'arrivee',duree:0,ordre:.3,debut:null,fin:null},
+    'L4':{nom:'1re - CAP2 garçons',niveaux:'1,CAPC2,CAPE2',sexe:'G',type:'arrivee',duree:0,ordre:.4,debut:null,fin:null},
+    'L5':{nom:'Terminales filles',niveaux:'T',sexe:'F',type:'arrivee',duree:0,ordre:.5,debut:null,fin:null},
+    'L6':{nom:'Terminales garçons',niveaux:'T',sexe:'G',type:'arrivee',duree:0,ordre:.6,debut:null,fin:null},
     '1':{nom:'Course 1',niveaux:'6,5',type:'tours',duree:45,debut:null,fin:null},
     '2':{nom:'Course 2',niveaux:'4,3',type:'tours',duree:45,debut:null,fin:null}
   }
@@ -142,14 +149,18 @@ export function readCfg(raw){
   for(const id of new Set([...Object.keys(DEFAULT_CFG.courses),...Object.keys(raw.courses||{})]))
     { const o={...(DEFAULT_CFG.courses[id]||{nom:'Course '+id,niveaux:'',type:'tours'}),...((raw.courses||{})[id]||{})};
       o.duree=Math.max(0,+o.duree||0);
-      if(o.type==='arrivee'&&String(o.niveaux).replace(/\s/g,'').toUpperCase()==='2,1,T') o.niveaux='2,1,T,CAP,3PM';   // réglage enregistré avant l'ajout des CAP et de la 3PM
       if(!o.off) c.courses[id]=o; }   // off:true = course supprimée
   for(const k of ['absence','plafond','boucle','delai']) c[k]=+c[k]||0;
   if(!c.absence) c.absence=60;
   if(!c.boucle) c.boucle=0.8;
   if(!c.plafond) c.plafond=15;
+  // Ordre d'affichage des courses : champ « ordre », sinon le numéro (le lycée passe avant le collège).
+  c.ordre=Object.keys(c.courses).sort((a,b)=>rangCourse(c.courses[a],a)-rangCourse(c.courses[b],b)||a.localeCompare(b));
   return c;
 }
+const rangCourse=(co,id)=>co.ordre!=null&&co.ordre!==''?+co.ordre:(isNaN(+id)?50:+id);
+export const coursesOrdonnees = cfg => (cfg.ordre||Object.keys(cfg.courses)).map(id=>[id,cfg.courses[id]]);
+export const idsLycee = cfg => (cfg.ordre||Object.keys(cfg.courses)).filter(id=>estArrivee(cfg.courses[id]));
 // Niveau = premier caractère de la classe : 601 → 6, 3PM → 3, TG1 → T, 2NDE3 → 2.
 export function niveauDe(classe){ const s=String(classe||'').trim().toUpperCase(); return s?s[0]:'?'; }
 export function libNiveau(n){ return n==='1'?'1<sup>re</sup>':/^\d$/.test(n)?n+'<sup>e</sup>':(n==='T'?'Term.':n); }
@@ -425,7 +436,7 @@ export function prepareImport(rows,cfg,existing){
     noms[d]={nom:r.nom,prenom:r.prenom};
   }
   const sansSexeL=Object.values(parts).filter(p=>!p.s&&lyc(p.c)).length;
-  if(sansSexeL) W.push(sansSexeL+' lycéen'+(sansSexeL>1?'s':'')+' sans sexe renseigné : ils ne figureront qu\'au classement général, pas chez les filles ni les garçons.');
+  if(sansSexeL) W.push(sansSexeL+' lycéen'+(sansSexeL>1?'s':'')+' sans sexe renseigné : ils ne seront rattachés à aucune course (les départs du lycée sont séparés filles / garçons).');
   const sansSexe=Object.values(parts).filter(p=>!p.s&&!lyc(p.c)).length;
   if(sansSexe) W.push(sansSexe+' élève'+(sansSexe>1?'s':'')+' sans sexe renseigné : les groupes concernés seront classés « mixtes ».');
   const sansGrp={};
@@ -469,8 +480,11 @@ export function niveauLycee(classe){ const c=String(classe||'').trim().toUpperCa
 export const ORDRE_LYCEE=['2','1','T','3PM'];
 // Rangs général, par sexe, par niveau et sexe, par classe et sexe (ordre des premiers passages).
 // La 3PM compte dans le classement général du lycée et a aussi son propre classement (son « niveau »).
-export function classementLycee(res,id){
-  const A=(res.arrivees[id]||{arrives:[],inscrits:0}).arrives, cpt={};
+export function classementLycee(res,ids){
+  ids=[].concat(ids||idsLycee(res.cfg));
+  // Plusieurs départs : on classe au temps de course ; à égalité, à l'heure d'arrivée.
+  const v=x=>x==null?Infinity:x;
+  const A=ids.flatMap(id=>(res.arrivees[id]||{arrives:[]}).arrives).sort((a,b)=>v(a.temps)-v(b.temps)||a.first-b.first), cpt={};
   const inc=k=>cpt[k]=(cpt[k]||0)+1;
   return A.map(x=>{ const s=x.p.s||'?', n=niveauLycee(x.p.c);
     return {...x,niv:n,rang:inc('g'),rangSexe:x.p.s?inc('s'+s):null,rangNiv:x.p.s?inc('n'+n+s):null,rangClasse:x.p.s?inc('c'+x.p.c+s):null}; });
@@ -479,13 +493,14 @@ export function statsLycee(L){
   const st=T=>{ const t=T.map(x=>x.temps).filter(v=>v!=null); return {n:T.length,best:t.length?Math.min(...t):null,moy:t.length?t.reduce((a,b)=>a+b,0)/t.length:null}; };
   return {F:st(L.filter(x=>x.p.s==='F')),G:st(L.filter(x=>x.p.s==='G')),T:st(L)};
 }
-export function exportLyceeCSV(res,noms,id){
-  const cfg=res.cfg, L=classementLycee(res,id), vu=new Set(L.map(x=>x.d));
+export function exportLyceeCSV(res,noms,ids){
+  ids=[].concat(ids||idsLycee(res.cfg));
+  const cfg=res.cfg, L=classementLycee(res,ids), vu=new Set(L.map(x=>x.d));
   const q=v=>{ v=v==null?'':String(v); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   const lig=[['Rang général','Rang filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
   for(const x of L){ const n=noms[x.d]||{};
     lig.push([x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
-  const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&courseDe(cfg,x.p)===id&&!vu.has(x.d))
+  const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&ids.includes(courseDe(cfg,x.p))&&!vu.has(x.d))
     .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
   for(const x of autres){ const n=noms[x.d]||{};
     lig.push(['','','','',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(niveauLycee(x.p.c)),x.p.s||'','','',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):'non arrivé']); }
@@ -494,9 +509,10 @@ export function exportLyceeCSV(res,noms,id){
 }
 
 // Lycée : une feuille par classe (dont CAP et 3PM), pour transmettre à chaque collègue.
-export function exportLyceeParClasse(res,noms,id){
-  const cfg=res.cfg, wb=XLSX.utils.book_new(), L=classementLycee(res,id);
-  const El=Object.values(res.lignes).filter(x=>x.p&&!x.p.a&&courseDe(cfg,x.p)===id);
+export function exportLyceeParClasse(res,noms,ids){
+  ids=[].concat(ids||idsLycee(res.cfg));
+  const cfg=res.cfg, wb=XLSX.utils.book_new(), L=classementLycee(res,ids);
+  const El=Object.values(res.lignes).filter(x=>x.p&&!x.p.a&&ids.includes(courseDe(cfg,x.p)));
   const cls=[...new Set(El.map(x=>x.p.c))].sort((a,b)=>ORDRE_LYCEE.indexOf(niveauLycee(a))-ORDRE_LYCEE.indexOf(niveauLycee(b))||a.localeCompare(b,'fr',{numeric:true}));
   const syn=[['Classe','Niveau','Inscrits','Arrivés','Filles arrivées','Garçons arrivés','Meilleur temps filles','Meilleur temps garçons','Temps moyen']];
   for(const c of cls){

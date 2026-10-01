@@ -86,7 +86,7 @@ function options(){
   const cur=$('sel').value;
   const cls=[...new Set(Object.values(P).filter(p=>!p.a).map(p=>p.c))].sort();
   let h='<option value="all">Tous les élèves</option>';
-  for(const id in cfg.courses) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (${cfg.courses[id].niveaux==='*'?'toutes les classes':'niveaux '+esc(cfg.courses[id].niveaux)}${cfg.courses[id].sexe?' · '+(cfg.courses[id].sexe==='F'?'filles':'garçons'):''})</option>`;
+  for(const id of cfg.ordre) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (${cfg.courses[id].niveaux==='*'?'toutes les classes':'niveaux '+esc(cfg.courses[id].niveaux)}${cfg.courses[id].sexe?' · '+(cfg.courses[id].sexe==='F'?'filles':'garçons'):''})</option>`;
   h+=cls.map(c=>`<option value="cl:${esc(c)}">Classe ${esc(c)}</option>`).join('');
   h+='<option value="adultes">Adultes : dossards 901 à 950 (vierges)</option>';
   $('sel').innerHTML=h; if([...$('sel').options].some(o=>o.value===cur)) $('sel').value=cur;
