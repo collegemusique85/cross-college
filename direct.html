@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261001b">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -105,6 +105,9 @@
 </style>
 </head>
 <body>
+<script>/* si une page récente rencontre un ancien fichier en cache : message clair au lieu d'une page vide */
+addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!document.getElementById('majBanner')&&document.body)
+  document.body.insertAdjacentHTML('afterbegin','<div id="majBanner" class="banner err" style="position:relative;z-index:99">Le site vient d\'être mis à jour : rechargez la page (ou fermez et rouvrez le Web Clip).</div>'); });</script>
 <div class="scr">
   <div class="ctl" id="ctl">
     <label class="hint">Course affichée <select id="coSel"></select></label>
@@ -126,7 +129,7 @@
   </div>
 </div>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001b';
 
 navBar('direct.html',true);
 const store=await boot();

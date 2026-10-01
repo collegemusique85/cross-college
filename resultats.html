@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Podiums — Cross</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261001b">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh}
   .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,24px);min-height:100vh}
@@ -52,6 +52,9 @@
 </style>
 </head>
 <body>
+<script>/* si une page récente rencontre un ancien fichier en cache : message clair au lieu d'une page vide */
+addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!document.getElementById('majBanner')&&document.body)
+  document.body.insertAdjacentHTML('afterbegin','<div id="majBanner" class="banner err" style="position:relative;z-index:99">Le site vient d\'être mis à jour : rechargez la page (ou fermez et rouvrez le Web Clip).</div>'); });</script>
 <div class="scr">
   <header>
     <div><div class="k" id="kicker">Résultats</div><h1 id="title">Podiums</h1></div>
@@ -81,7 +84,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,LS,navBar} from './app.js';
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,LS,navBar} from './app.js?v=20261001b';
 
 navBar('resultats.html',true);
 const store=await boot();

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261001b">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -25,6 +25,9 @@
 </style>
 </head>
 <body>
+<script>/* si une page récente rencontre un ancien fichier en cache : message clair au lieu d'une page vide */
+addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!document.getElementById('majBanner')&&document.body)
+  document.body.insertAdjacentHTML('afterbegin','<div id="majBanner" class="banner err" style="position:relative;z-index:99">Le site vient d\'être mis à jour : rechargez la page (ou fermez et rouvrez le Web Clip).</div>'); });</script>
 <div id="callBanner"></div>
 <div class="wrap">
   <div class="top">
@@ -149,7 +152,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261001b';
 
 navBar('admin.html');
 const store=await boot();
