@@ -149,7 +149,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe} from './app.js';
+  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js';
 
 navBar('admin.html');
 const store=await boot();
@@ -304,7 +304,10 @@ $('qOut').onclick=e=>{
 // ================================================================= adultes
 function fillClasses(){
   const cur=$('aC').value;
-  const cls=[...new Set(Object.values(S.participants).filter(p=>!p.a).map(p=>p.c))].sort();
+  // Les adultes ne courent qu'avec le collège : seules les classes du collège sont proposées.
+  const cfg=readCfg(S.config);
+  const cls=[...new Set(Object.values(S.participants).filter(p=>p&&!p.a&&!estLyceeClasse(cfg,p.c)).map(p=>p.c))]
+    .sort((a,b)=>'6543'.indexOf(a[0])-'6543'.indexOf(b[0])||a.localeCompare(b,'fr',{numeric:true}));
   const html='<option value="">Aucune classe (compté à part)</option>'+cls.map(c=>`<option${c===cur?' selected':''}>${esc(c)}</option>`).join('');
   if($('aC').innerHTML!==html) $('aC').innerHTML=html;
 }
