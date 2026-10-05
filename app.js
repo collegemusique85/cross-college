@@ -693,6 +693,7 @@ export async function boot(){
     throw e;
   }
   if(!store){ askKey(); throw new Error('clé'); }
+  orgKey();   // un lien « …&org=… » (lien unique des collègues) enregistre le code organisateur sur cet ordinateur
   store.onError(e=>{
     if(String(e&&(e.code||e.message)).toLowerCase().includes('permission')){
       LS.del('cross.cle'); askKey('Cette clé est refusée. Vérifiez-la auprès de l\'organisateur.');

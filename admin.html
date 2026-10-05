@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005a">
+<link rel="stylesheet" href="style.css?v=20261005b">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -161,7 +161,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005a';
+  getNoms,setNoms,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005b';
 
 navBar('admin.html');
 const store=await boot();
@@ -412,7 +412,7 @@ $('xTpl').onclick=()=>{
 function drawLinks(){
   const base=location.href.replace(/[^/]*$/,''), k=encodeURIComponent(store.key);
   const org=orgKey(), o=org&&store.mode==='firebase'?'&org='+encodeURIComponent(org):'', avec=o?' — avec les noms':'';
-  const L=[['Tablettes de scan'+(o?' — sans les noms':''),'scan.html',''],['Classes en direct (TV, projection)'+avec,'direct.html',o],['Podiums (fin)'+avec,'resultats.html',o],
+  const L=[...(o?[['★ Lien unique pour les collègues : tout le site, avec les noms','index.html',o]]:[]),['Tablettes de scan'+(o?' — sans les noms':''),'scan.html',''],['Classes en direct (TV, projection)'+avec,'direct.html',o],['Podiums (fin)'+avec,'resultats.html',o],
     ...(o?[['Contrôle des scans (autre ordinateur)'+avec,'admin.html',o,'#controle'],['Organisation (autre ordinateur)'+avec,'admin.html',o]]:[]),
     ['Impression des dossards'+avec,'dossards.html',o]];
   $('links').innerHTML=L.map(([t,p,oo,h])=>{
