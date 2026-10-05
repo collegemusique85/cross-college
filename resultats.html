@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Podiums — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001d">
+<link rel="stylesheet" href="style.css?v=20261005a">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh}
   .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,24px);min-height:100vh}
@@ -83,8 +83,8 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,LS,navBar} from './app.js?v=20261001d';
+import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,suivreNoms,publierNoms,nomDe,
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,LS,navBar} from './app.js?v=20261005a';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -239,7 +239,7 @@ $('nameFile').onchange=async e=>{
   const wb=XLSX.read(await f.arrayBuffer());
   const {rows}=parseWorkbook(wb); const n={};
   for(const r of rows){ const d=parseInt(r.dossard,10); if(d) n[d]={nom:r.nom,prenom:r.prenom}; }
-  noms={...noms,...n}; setNoms(store.key,noms);
+  noms={...noms,...n}; setNoms(store.key,noms); publierNoms(store,n).catch(()=>{});
   alert(Object.keys(n).length+' noms chargés sur cet ordinateur. Ils ne sont envoyés nulle part.');
   draw();
 };
@@ -248,6 +248,8 @@ $('xlsCl').onclick=()=>{ if(res) exportParClasse(res,noms); };
 // Les exports du lycée portent toujours sur toutes ses courses.
 $('xlsLyCl').onclick=()=>{ if(res) exportLyceeParClasse(res,noms,idsLycee(res.cfg)); };
 $('csvLy').onclick=()=>{ if(res) exportLyceeCSV(res,noms,idsLycee(res.cfg)); };
+// Noms en ligne (lien avec le code organisateur) : plus besoin de charger le fichier Excel.
+suivreNoms(store,(n,e)=>{ noms=n; $('names').style.display=/^en ligne:[1-9]/.test(e)?'none':''; later(); });
 </script>
 </body>
 </html>

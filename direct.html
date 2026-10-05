@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001d">
+<link rel="stylesheet" href="style.css?v=20261005a">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -135,7 +135,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261001d';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261005a';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -321,8 +321,11 @@ $('nomFile').onchange=async e=>{
   const ids=Object.keys(r.parts), P=S.participants||{};
   if(r.E.length||!ids.length||!ids.every(d=>P[d]&&P[d].c===r.parts[d].c)){ alert('Ce fichier ne correspond pas à la liste publiée : importez-le d\'abord dans Organisation.'); return; }
   noms={...noms,...r.noms}; setNoms(store.key,noms); draw();
+  publierNoms(store,r.noms).catch(()=>{});
   alert(ids.length+' noms chargés sur cet ordinateur.');
 };
+// Noms en ligne (lien avec le code organisateur) : le bouton « Noms (Excel) » devient inutile.
+suivreNoms(store,(n,e)=>{ noms=n; $('nomBtn').style.display=/^en ligne:[1-9]/.test(e)?'none':''; draw(); });
 $('fs').onclick=()=>{ const d=document.documentElement; (d.requestFullscreen||d.webkitRequestFullscreen||(()=>{})).call(d); };
 let idle; const wake=()=>{ document.body.classList.remove('idle'); clearTimeout(idle); idle=setTimeout(()=>document.body.classList.add('idle'),4000); };
 ['mousemove','touchstart','keydown'].forEach(e=>addEventListener(e,wake,{passive:true})); wake();

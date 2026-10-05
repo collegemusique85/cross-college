@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Scan cross">
 <title>Scan — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001d">
+<link rel="stylesheet" href="style.css?v=20261005a">
 <style>
   html,body{height:100%;background:#000;color:#fff;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
   #stage{position:fixed;inset:0;background:#000}
@@ -145,7 +145,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script type="module">
-import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES,readCfg,courseDe} from './app.js?v=20261001d';
+import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES,readCfg,courseDe} from './app.js?v=20261005a';
 // scan.html?mode=absents : on scanne les dossards récupérés le matin ; l'élève est noté « absent ».
 const ABS=new URLSearchParams(location.search).get('mode')==='absents';
 if(ABS){

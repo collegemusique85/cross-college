@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001d">
+<link rel="stylesheet" href="style.css?v=20261005a">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -53,7 +53,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   </div>
 
   <!-- CONTRÔLE ----------------------------------------------------------->
-  <div class="card">
+  <div class="card" id="controle">
     <h2>Contrôle</h2>
     <p>Tout ce qui mérite un coup d'œil, au même endroit. Chaque décision est enregistrée et visible dans l'export.</p>
     <div id="control"></div>
@@ -84,7 +84,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   <!-- PARTICIPANTS ------------------------------------------------------->
   <div class="card">
     <h2>Participants</h2>
-    <p>Importez le fichier Excel des élèves. Les noms restent sur cet ordinateur : seuls les numéros, classes, sexes et groupes sont envoyés en ligne.</p>
+    <p>Importez le fichier Excel des élèves. Les tablettes ne reçoivent que les numéros, classes, sexes et groupes. Les noms restent sur cet ordinateur, ou sont rangés à part pour les ordinateurs d'organisation (carte suivante).</p>
     <div class="row">
       <input type="file" id="xFile" accept=".xlsx,.xls,.csv" hidden>
       <button class="btn primary" id="xPick">Importer un fichier Excel…</button>
@@ -97,10 +97,18 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <div id="absList" style="margin-top:8px"></div>
   </div>
 
+  <!-- NOMS EN LIGNE ------------------------------------------------------>
+  <div class="card" id="orgCard">
+    <h2>Noms des élèves sur plusieurs ordinateurs</h2>
+    <p>Les noms sont rangés en ligne à part, derrière un <b>code organisateur</b> que seuls les ordinateurs d'organisation connaissent (liens de la carte suivante). Les tablettes ne l'ont jamais : elles ne voient que des numéros.</p>
+    <p id="orgEtat" class="msg w" style="margin-top:10px">…</p>
+    <div id="orgBox" style="margin-top:10px"></div>
+  </div>
+
   <!-- LIENS -------------------------------------------------------------->
   <div class="card">
     <h2>Liens à ouvrir</h2>
-    <p>Chaque lien contient la clé de l'événement. Flashez le QR code avec l'appareil photo de l'iPad, ou poussez le lien des tablettes en Web Clip avec Jamf.</p>
+    <p>Chaque lien contient la clé de l'événement. Flashez le QR code avec l'appareil photo de l'iPad, ou poussez le lien des tablettes en Web Clip avec Jamf. <b>Le lien des tablettes ne contient jamais le code organisateur</b> ; les autres liens le contiennent (ne les donnez qu'aux ordinateurs d'organisation).</p>
     <div class="links" id="links"></div>
   </div>
 
@@ -120,7 +128,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <div class="grid2" id="cCourses" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button><button class="btn" id="cAdd">+ Ajouter une course</button></div>
     <div class="row" style="margin-top:10px;align-items:center"><span class="small muted">Préréglages :</span>
-      <button class="btn small" data-preset="journee">Journée : lycée (6 départs, à l'arrivée), puis 6<sup>e</sup>-5<sup>e</sup> et 4<sup>e</sup>-3<sup>e</sup> (45 min aux tours)</button></div>
+      <button class="btn small" data-preset="journee">Journée : lycée (6 départs, à l'arrivée), puis 6<sup>e</sup>-5<sup>e</sup> et 4<sup>e</sup>-3<sup>e</sup>-3PM (45 min aux tours)</button></div>
     <p class="small muted" style="margin-top:10px">Le lycée et le collège partagent le même événement : dossards du lycée à partir de 1001, du collège à partir de 1, adultes de 901 à 950. Chaque liste peut être importée séparément sans effacer l'autre.</p>
   </details>
 
@@ -145,7 +153,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
       <button class="btn danger" id="resetAll">Tout réinitialiser…</button>
     </div>
     <p class="small muted" style="margin-top:6px">« Effacer les passages » : scans, corrections, heures de départ et liste des tablettes ; les élèves, adultes et absents restent.
-    « Tout réinitialiser » : en plus, la liste des élèves, les adultes, les absents et les noms gardés sur cet ordinateur.</p>
+    « Tout réinitialiser » : en plus, la liste des élèves, les adultes, les absents, les noms gardés sur cet ordinateur et les noms en ligne.</p>
   </details>
 </div>
 
@@ -153,13 +161,13 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261001d';
+  getNoms,setNoms,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005a';
 
 navBar('admin.html');
 const store=await boot();
 const S={participants:{},scans:{},corrections:{},config:{},devices:{}};
 const now=()=>store.now();
-let noms=getNoms(store.key), res=null, tm=null, audio=null, calls=[], cfgFilled=false, pending=null;
+let noms=getNoms(store.key), etatNoms='local', res=null, tm=null, audio=null, calls=[], cfgFilled=false, pending=null;
 store.onValue('participants',v=>{S.participants=v; later();});
 store.onValue('corrections',v=>{S.corrections=v; later();});
 store.onValue('config',v=>{S.config=v; later(); fillCfg();});
@@ -375,7 +383,10 @@ function publish(){
   const garde={}; for(const d in pending.keep) if(noms[d]) garde[d]=noms[d];
   store.set('participants',{...pending.keep,...pending.parts,...adults}).then(()=>{
     noms={...garde,...pending.noms}; setNoms(store.key,noms);
-    $('xOut').innerHTML='<p class="msg o">Liste publiée : '+pending.stats.eleves+' élèves. Les tablettes la reçoivent automatiquement.</p>'; pending=null; later();
+    $('xOut').innerHTML='<p class="msg o">Liste publiée : '+pending.stats.eleves+' élèves. Les tablettes la reçoivent automatiquement.</p>';
+    const nouv=pending.noms; pending=null; later();
+    publierNoms(store,nouv).then(ok=>{ if(ok) $('xOut').querySelector('.msg').textContent+=' Noms mis en ligne pour les ordinateurs d\'organisation.'; },
+      ()=>{ $('xOut').insertAdjacentHTML('beforeend','<p class="msg w">Les noms n\'ont pas pu être mis en ligne : règles Firebase à mettre à jour (carte « Noms des élèves sur plusieurs ordinateurs »). Ils restent sur cet ordinateur.</p>'); });
   },err=>{ $('xOut').innerHTML='<p class="msg e">Échec de l\'envoi : '+esc(err.message||err)+'</p>'; });
 }
 $('xTpl').onclick=()=>{
@@ -391,7 +402,7 @@ $('xTpl').onclick=()=>{
     ['Sexe : F ou G.'],
     ['Groupe : G1, G2… (5 élèves au maximum). Laisser vide si l\'élève n\'a pas de groupe : il compte quand même pour sa classe.'],
     ['Type de groupe : Filles, Garçons ou Mixte. Indispensable si vous numérotez G1, G2… séparément pour les filles et les garçons d\'une même classe.'],
-    [''],['Les noms et prénoms ne quittent pas l\'ordinateur qui fait l\'import.']]);
+    [''],['Les noms et prénoms ne sont jamais envoyés aux tablettes.']]);
   aide['!cols']=[{wch:120}];
   XLSX.utils.book_append_sheet(wb,aide,'Mode d\'emploi');
   XLSX.writeFile(wb,'modele-participants-cross.xlsx');
@@ -400,9 +411,12 @@ $('xTpl').onclick=()=>{
 // ================================================================= liens
 function drawLinks(){
   const base=location.href.replace(/[^/]*$/,''), k=encodeURIComponent(store.key);
-  const L=[['Tablettes de scan','scan.html'],['Classes en direct (projection)','direct.html'],['Podiums des groupes (fin)','resultats.html'],['Impression des dossards','dossards.html']];
-  $('links').innerHTML=L.map(([t,p])=>{
-    const u=base+p+(store.mode==='firebase'?'?cle='+k:'');
+  const org=orgKey(), o=org&&store.mode==='firebase'?'&org='+encodeURIComponent(org):'', avec=o?' — avec les noms':'';
+  const L=[['Tablettes de scan'+(o?' — sans les noms':''),'scan.html',''],['Classes en direct (TV, projection)'+avec,'direct.html',o],['Podiums (fin)'+avec,'resultats.html',o],
+    ...(o?[['Contrôle des scans (autre ordinateur)'+avec,'admin.html',o,'#controle'],['Organisation (autre ordinateur)'+avec,'admin.html',o]]:[]),
+    ['Impression des dossards'+avec,'dossards.html',o]];
+  $('links').innerHTML=L.map(([t,p,oo,h])=>{
+    const u=base+p+(store.mode==='firebase'?'?cle='+k+oo:'')+(h||'');
     let svg=''; try{ const q=qrcode(0,'M'); q.addData(u); q.make(); svg=q.createSvgTag({cellSize:3,margin:2,scalable:true}); }catch(e){}
     return `<div class="card"><h2 style="font-size:15px">${t}</h2><div class="qr">${svg}</div><p style="margin:8px 0"><code>${esc(u)}</code></p>
       <div class="row"><a class="btn small" href="${esc(u)}" target="_blank">Ouvrir</a><button class="btn small" data-copy="${esc(u)}">Copier</button></div></div>`;
@@ -438,8 +452,8 @@ $('cAdd').onclick=()=>{ const ids=Object.keys({...readCfg({}).courses,...(S.conf
   store.update({['config/courses/'+id]:{nom:'Course '+id,niveaux:'',type:'tours'}}).then(()=>{ cfgFilled=false; fillCfg(); }); };
 const PRESETS={
   journee:{titre:'Cross Saint-Gabriel',courses:{'0':{off:true},
-    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'F',type:'arrivee',duree:0,ordre:.1},
-    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'G',type:'arrivee',duree:0,ordre:.2},
+    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1',sexe:'F',type:'arrivee',duree:0,ordre:.1},
+    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1',sexe:'G',type:'arrivee',duree:0,ordre:.2},
     'L3':{nom:'1re - CAP2 filles',niveaux:'1,CAPC2,CAPE2',sexe:'F',type:'arrivee',duree:0,ordre:.3},
     'L4':{nom:'1re - CAP2 garçons',niveaux:'1,CAPC2,CAPE2',sexe:'G',type:'arrivee',duree:0,ordre:.4},
     'L5':{nom:'Terminales filles',niveaux:'T',sexe:'F',type:'arrivee',duree:0,ordre:.5},
@@ -505,8 +519,52 @@ $('resetAll').onclick=()=>{
   const u={participants:null,scans:null,corrections:null,devices:null,'config/resetAt':now()};
   for(const id in readCfg(S.config).courses){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
   setNoms(store.key,{}); LS.del('cross.podium.'+store.key);
-  store.update(u).then(()=>location.reload());
+  const fini=()=>location.reload();
+  store.update(u).then(()=>{ setTimeout(fini,4000); effacerNomsEnLigne(store).then(fini,fini); });
 };
+// ================================================================= noms en ligne (code organisateur)
+function regles(org){
+  const c="$cle === '"+store.key+"' || $cle === '"+org+"'";
+  return JSON.stringify({rules:{'.read':false,'.write':false,events:{'$cle':{'.read':c,'.write':c}}}},null,2);
+}
+function drawOrg(){
+  const org=orgKey(), n=Object.keys(getNoms(store.key)).length, e=etatNoms, el=$('orgEtat');
+  if(!org){ el.className='msg w'; el.textContent='Pas de code organisateur sur cet ordinateur : les noms restent ici ('+n+' noms).';
+    $('orgBox').innerHTML=`<div class="row"><button class="btn primary" id="orgNew">Créer un code organisateur</button>
+      <span class="small muted">ou, si un collègue l'a déjà créé :</span><input id="orgIn" placeholder="code organisateur" style="max-width:220px"><button class="btn" id="orgSet">Utiliser ce code</button></div>
+      <p class="small muted" style="margin-top:8px">Le plus simple sur un autre ordinateur : ouvrir le lien « Organisation (autre ordinateur) » d'un ordinateur déjà réglé ; il contient le code.</p>`;
+    return; }
+  if(e.startsWith('en ligne')){ const k=+e.split(':')[1]||0; el.className='msg o';
+    el.textContent='Noms en ligne : '+k+' noms partagés entre les ordinateurs d\'organisation (code '+org+').'+(n>k?' Cet ordinateur en connaît '+n+' : mettez-les en ligne ci-dessous.':''); }
+  else if(e==='refusé'){ el.className='msg e'; el.textContent='Code '+org+' refusé par Firebase : collez les règles ci-dessous dans la console Firebase (Realtime Database → Règles → Publier), puis rechargez cette page. En attendant, les noms de cet ordinateur restent utilisés.'; }
+  else { el.className='msg w'; el.textContent='Connexion aux noms en ligne (code '+org+')…'; }
+  $('orgBox').innerHTML=`<details${e==='refusé'?' open':''}><summary>Règles Firebase à coller (une seule fois)</summary>
+      <p class="small muted">Console Firebase → Realtime Database → Règles : remplacez tout le texte par celui-ci, puis « Publier ». Si vos règles contiennent d'autres clés, gardez-les en ajoutant <code>|| $cle === '${esc(org)}'</code>.</p>
+      <pre id="orgRules" style="white-space:pre-wrap;background:var(--soft,#f4f4f4);padding:10px;border-radius:8px;font-size:13px">${esc(regles(org))}</pre>
+      <button class="btn small" id="orgCopy">Copier les règles</button></details>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary" id="orgUp"${n&&e.startsWith('en ligne')?'':' disabled'}>Mettre en ligne les noms de cet ordinateur (${n})</button>
+      <button class="btn danger" id="orgDel"${e.startsWith('en ligne')?'':' disabled'}>Effacer les noms en ligne…</button>
+      <button class="btn" id="orgForget">Oublier le code sur cet ordinateur</button>
+    </div><div id="orgOut" style="margin-top:8px"></div>`;
+}
+const recharger=()=>{ const u=new URL(location.href); u.searchParams.delete('org'); location.href=u.toString(); };
+$('orgBox').onclick=e=>{
+  const id=e.target.id;
+  if(id==='orgNew'){ const a=new Uint8Array(9); crypto.getRandomValues(a);
+    setOrgKey('org-'+[...a].map(x=>'abcdefghjkmnpqrstuvwxyz23456789'[x%31]).join('')); recharger(); }
+  if(id==='orgSet'){ const v=safeKey($('orgIn').value); if(!v) return;
+    if(v===store.key){ alert('Le code organisateur doit être différent de la clé de l\'événement (que les tablettes connaissent).'); return; }
+    setOrgKey(v); recharger(); }
+  if(id==='orgCopy') navigator.clipboard.writeText(regles(orgKey())).then(()=>{ e.target.textContent='Copié ✓'; });
+  if(id==='orgUp'){ e.target.disabled=true;
+    publierNoms(store,getNoms(store.key)).then(()=>{ $('orgOut').innerHTML='<p class="msg o">Noms mis en ligne.</p>'; },
+      err=>{ $('orgOut').innerHTML='<p class="msg e">Échec : '+esc(err.message||err)+'</p>'; e.target.disabled=false; }); }
+  if(id==='orgDel'){ if(!confirm('Effacer les noms en ligne pour tous les ordinateurs d\'organisation ?\nLes noms gardés sur cet ordinateur restent.')) return;
+    effacerNomsEnLigne(store).then(()=>{ $('orgOut').innerHTML='<p class="msg o">Noms en ligne effacés.</p>'; },err=>alert('Échec : '+(err.message||err))); }
+  if(id==='orgForget'){ if(!confirm('Oublier le code organisateur sur cet ordinateur ? Les noms en ligne ne sont pas effacés.')) return; setOrgKey(''); recharger(); }
+};
+suivreNoms(store,(n,e)=>{ noms=n; etatNoms=e; drawOrg(); drawLinks(); later(); });
 later();
 </script>
 </body>

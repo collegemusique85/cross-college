@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dossards — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261001d">
+<link rel="stylesheet" href="style.css?v=20261005a">
 <style>
   /* Feuille dessinée à 190 × 270 mm : elle tient dans une A4 même si le navigateur
      ajoute ses propres marges (Safari), au lieu de déborder et de décaler toutes les pages. */
@@ -77,10 +77,10 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,getNoms,setNoms,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261001d';
+import {$,esc,boot,getNoms,setNoms,suivreNoms,publierNoms,orgKey,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261005a';
 navBar('dossards.html');
 const store=await boot();
-let noms=getNoms(store.key);
+let noms=getNoms(store.key), etatNoms='local';
 let P={}, cfg=readCfg({});
 store.onValue('participants',v=>{ P=v||{}; options(); draw(); });
 store.onValue('config',v=>{ cfg=readCfg(v); options(); });
@@ -135,8 +135,10 @@ function ajusterNoms(){
     while(f>3.6&&(el.scrollHeight>el.clientHeight+1||el.scrollWidth>el.clientWidth+1)){ f-=.3; el.style.fontSize=f+'mm'; } });
 }
 // ------------------------------------------------------------ import du fichier Excel
-function nomsInfo(){ const n=Object.keys(noms).length; $('nomsInfo').textContent=n?n+' noms connus sur cet ordinateur':'Aucun nom sur cet ordinateur : les dossards sortiront sans nom.'; }
+function nomsInfo(){ const n=Object.keys(noms).length;
+  $('nomsInfo').textContent=n?n+' noms connus'+(/^en ligne:[1-9]/.test(etatNoms)?' (liste en ligne des organisateurs)':' sur cet ordinateur'):'Aucun nom sur cet ordinateur : les dossards sortiront sans nom.'; }
 nomsInfo();
+const enLigne=r=>publierNoms(store,r).then(ok=>ok?' Noms aussi mis en ligne pour les ordinateurs d\'organisation.':'',()=>' (Noms non mis en ligne : vérifiez les règles Firebase, page Organisation.)');
 $('xPick').onclick=()=>$('xFile').click();
 $('xFile').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
@@ -149,12 +151,13 @@ $('xFile').onchange=async e=>{
   if(deja){
     noms={...noms,...r.noms}; setNoms(store.key,noms); nomsInfo(); draw();
     $('xOut').innerHTML='<p class="msg o">'+ids.length+' noms chargés pour l\'impression. La liste en ligne était déjà à jour : rien n\'a été republié.</p>';
+    enLigne(r.noms).then(t=>{ if(t) $('xOut').querySelector('.msg').textContent+=t; });
     return;
   }
   const P0=Object.values(P).filter(p=>p&&!p.a).length;
   $('xOut').innerHTML=`<p class="small muted">Feuilles lues : ${notes.map(esc).join(' · ')}</p>
     ${r.W.map(x=>'<div class="msg w">'+esc(x)+'</div>').join('')}
-    <div class="msg w">${P0?'Ce fichier ne correspond pas à la liste déjà publiée : le publier remplacera ':'Aucune liste publiée : le publier enverra '}${r.stats.eleves} élèves (numéros, classes, sexes ; jamais les noms).</div>
+    <div class="msg w">${P0?'Ce fichier ne correspond pas à la liste déjà publiée : le publier remplacera ':'Aucune liste publiée : le publier enverra '}${r.stats.eleves} élèves (numéros, classes, sexes${orgKey()?' ; les noms vont à part, pour les seuls ordinateurs d\'organisation':' ; jamais les noms'}).</div>
     <div class="row" style="margin-top:8px"><button class="btn vest" id="xGo">Publier ces ${r.stats.eleves} élèves et charger les noms</button></div>`;
   $('xGo').onclick=()=>{
     const adults={}; for(const [d,p] of Object.entries(P)) if(p&&p.a) adults[d]=p;
@@ -162,11 +165,13 @@ $('xFile').onchange=async e=>{
     store.set('participants',{...r.keep,...r.parts,...adults}).then(()=>{
       noms={...garde,...r.noms}; setNoms(store.key,noms); nomsInfo();
       $('xOut').innerHTML='<p class="msg o">Liste publiée ('+r.stats.eleves+' élèves) et noms chargés sur cet ordinateur.</p>';
+      enLigne(r.noms).then(t=>{ if(t) $('xOut').querySelector('.msg').textContent+=t; });
     },err=>{ $('xOut').innerHTML='<p class="msg e">Échec de l\'envoi : '+esc(err.message||err)+'</p>'; });
   };
 };
 $('sel').onchange=draw; $('ord').onchange=draw; $('withNames').onchange=draw;
 $('print').onclick=()=>window.print();
+suivreNoms(store,(n,e)=>{ noms=n; etatNoms=e; nomsInfo(); draw(); });
 </script>
 </body>
 </html>

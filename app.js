@@ -39,6 +39,14 @@ export function eventKey(){
   return LS.get('cross.cle','') || '';
 }
 export function setEventKey(k){ LS.set('cross.cle', String(k||'').trim()); }
+// Code organisateur : donne accès aux noms des élèves, rangés à part (events/{code}/noms).
+// Seuls les ordinateurs d'organisation le connaissent ; les tablettes ne l'ont jamais.
+export function orgKey(){
+  const u=new URLSearchParams(location.search).get('org');
+  if(u){ LS.set('cross.org', safeKey(u)); return safeKey(u); }
+  return LS.get('cross.org','') || '';
+}
+export function setOrgKey(k){ if(k) LS.set('cross.org', safeKey(k)); else LS.del('cross.org'); }
 export const firebaseConfigured = () =>
   !!(CONFIG.firebase && CONFIG.firebase.apiKey && CONFIG.firebase.databaseURL);
 
@@ -74,13 +82,18 @@ async function fbStore(key){
     update(obj){ return D.update(R(''),obj); },
     set(path,val){ return D.set(R(path),val); },
     remove(path){ return D.remove(R(path)); },
-    get(path){ return D.get(R(path)).then(s=>s.val()); }
+    get(path){ return D.get(R(path)).then(s=>s.val()); },
+    // Accès à une autre racine (code organisateur), avec ses propres erreurs : un refus ici ne touche pas la clé de l'événement.
+    racine(k){ const R2=p=>D.ref(db,'events/'+k+(p?'/'+p:''));
+      return { onValue(path,cb,err){ D.onValue(R2(path),s=>cb(s.val()||{}),e=>err&&err(e)); },
+        update(o){ return D.update(R2(''),o); }, remove(path){ return D.remove(R2(path)); } }; }
   };
 }
 
 // ---------------------------------------------------------------- mode local
 // Même interface que Firebase, stockée dans le navigateur. Les onglets d'un
 // même appareil se tiennent au courant entre eux ; rien ne sort de l'appareil.
+const RACINES={};
 function localStore(key){
   const P='cross.local.'+key+'/';
   const subs={}, addSubs=new Set(), known=new Set();
@@ -117,7 +130,8 @@ function localStore(key){
     set(path,val){ emit(apply(path,val)); return Promise.resolve(); },
     remove(path){ emit(apply(path,null)); return Promise.resolve(); },
     get(path){ const parts=path.split('/').filter(Boolean); let o=load(parts.shift());
-      for(const p of parts){ o=o&&o[p]; } return Promise.resolve(o??null); }
+      for(const p of parts){ o=o&&o[p]; } return Promise.resolve(o??null); },
+    racine(k){ const L2=RACINES[k]||(RACINES[k]=localStore(k)); return { onValue(path,cb){ L2.onValue(path,cb); }, update(o){ return L2.update(o); }, remove(path){ return L2.remove(path); } }; }
   };
 }
 
@@ -132,8 +146,8 @@ export const DEFAULT_CFG = {
   courses:{
     '0':{off:true},   // ancienne course unique du lycée, remplacée par les six courses ci-dessous
     // Lycée : deux départs par niveau (filles puis garçons), classement à l'arrivée, avant le collège.
-    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'F',type:'arrivee',duree:0,ordre:.1,debut:null,fin:null},
-    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1,3PM',sexe:'G',type:'arrivee',duree:0,ordre:.2,debut:null,fin:null},
+    'L1':{nom:'2de - CAP1 filles',niveaux:'2,CAPC1,CAPE1',sexe:'F',type:'arrivee',duree:0,ordre:.1,debut:null,fin:null},
+    'L2':{nom:'2de - CAP1 garçons',niveaux:'2,CAPC1,CAPE1',sexe:'G',type:'arrivee',duree:0,ordre:.2,debut:null,fin:null},
     'L3':{nom:'1re - CAP2 filles',niveaux:'1,CAPC2,CAPE2',sexe:'F',type:'arrivee',duree:0,ordre:.3,debut:null,fin:null},
     'L4':{nom:'1re - CAP2 garçons',niveaux:'1,CAPC2,CAPE2',sexe:'G',type:'arrivee',duree:0,ordre:.4,debut:null,fin:null},
     'L5':{nom:'Terminales filles',niveaux:'T',sexe:'F',type:'arrivee',duree:0,ordre:.5,debut:null,fin:null},
@@ -149,6 +163,8 @@ export function readCfg(raw){
   for(const id of new Set([...Object.keys(DEFAULT_CFG.courses),...Object.keys(raw.courses||{})]))
     { const o={...(DEFAULT_CFG.courses[id]||{nom:'Course '+id,niveaux:'',type:'tours'}),...((raw.courses||{})[id]||{})};
       o.duree=Math.max(0,+o.duree||0);
+      // Décision du 05/10 : la 3PM court avec les 4e-3e ; on la retire des courses du lycée déjà enregistrées.
+      if(o.type==='arrivee'&&/3PM/i.test(o.niveaux||'')) o.niveaux=String(o.niveaux).split(',').filter(x=>x.trim().toUpperCase()!=='3PM').join(',');
       if(!o.off) c.courses[id]=o; }   // off:true = course supprimée
   for(const k of ['absence','plafond','boucle','delai']) c[k]=+c[k]||0;
   if(!c.absence) c.absence=60;
@@ -338,6 +354,24 @@ export function compute(state){
 export const nomsKey = k => 'cross.noms.'+k;
 export function getNoms(k){ return LS.get(nomsKey(k),{})||{}; }
 export function setNoms(k,obj){ return LS.set(nomsKey(k),obj); }
+// ---------------------------------------------------------------- noms en ligne (code organisateur)
+// cb(noms, etat) : etat = 'en ligne' | 'local' (pas de code) | 'refusé' (règles Firebase à mettre à jour).
+// Les noms reçus en ligne restent en mémoire : ils ne sont pas recopiés sur l'ordinateur.
+export function suivreNoms(store,cb){
+  const local=getNoms(store.key); cb({...local},'local');
+  const org=orgKey(); if(!org||!store.racine) return;
+  store.racine(org).onValue('noms',v=>{
+    const n={}; for(const d in v){ const x=v[d]||{}; n[d]={nom:x.n||'',prenom:x.p||''}; }
+    cb({...getNoms(store.key),...n},'en ligne:'+Object.keys(n).length);
+  },()=>cb({...getNoms(store.key)},'refusé'));
+}
+export function publierNoms(store,noms){
+  const org=orgKey(); if(!org||!store.racine) return Promise.resolve(false);
+  const u={}; for(const d in noms){ const x=noms[d]||{}; if(x.nom||x.prenom) u['noms/'+d]={n:x.nom||'',p:x.prenom||''}; }
+  return Object.keys(u).length?store.racine(org).update(u).then(()=>true):Promise.resolve(true);
+}
+export function effacerNomsEnLigne(store){ const org=orgKey(); return org&&store.racine?store.racine(org).remove('noms'):Promise.resolve(); }
+
 export function nomDe(noms,L){
   const p=L.p;
   if(p&&p.a) return p.n||'Adulte '+L.d;
@@ -405,7 +439,7 @@ export function prepareImport(rows,cfg,existing){
   const ordre={'6':0,'5':1,'4':2,'3':3,'2':4,'1':5,'T':6};
   // Collège et lycée s'importent ensemble ou séparément : un fichier qui ne contient que
   // des classes du lycée ne remplace que le lycée, et inversement.
-  const lyc=c=>estLyceeClasse(cfg,c);
+  const lyc=c=>classeDuLycee(c);
   const aL=rows.some(r=>lyc(r.classe)), aC=rows.some(r=>r.classe&&!lyc(r.classe));
   const pris={};
   for(const [d,p] of Object.entries(existing||{})) if(p&&!p.a&&(lyc(p.c)?!aL:!aC)){ keep[d]=p; pris[d]='liste déjà publiée'; }
@@ -485,6 +519,9 @@ export function niveauLycee(classe){ const c=String(classe||'').trim().toUpperCa
   if(c.startsWith('CAP')){ const m=c.match(/(\d)\s*$/); return m&&m[1]==='2'?'1':'2'; }
   return c[0]||'?'; }
 export const ORDRE_LYCEE=['2','1','T','3PM'];
+// Classe venant de la liste du lycée (d'après son nom), quelle que soit sa course : 2…, 1…, T…, CAP…, 3PM.
+// Sert à l'import (chaque liste ne remplace que sa partie) et à la numérotation (lycée à partir de 1001).
+export function classeDuLycee(c){ c=String(c||'').trim().toUpperCase(); return /^[21T]/.test(c)||c.startsWith('CAP')||c.startsWith('3PM'); }
 // Rangs général, par sexe, par niveau et sexe, par classe et sexe (ordre des premiers passages).
 // La 3PM compte dans le classement général du lycée et a aussi son propre classement (son « niveau »).
 export function classementLycee(res,ids){

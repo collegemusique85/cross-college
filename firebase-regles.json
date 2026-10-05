@@ -4,8 +4,8 @@
     ".write": false,
     "events": {
       "$cle": {
-        ".read": "$cle === 'CLE-DU-COLLEGE' || $cle === 'CLE-DU-LYCEE'",
-        ".write": "$cle === 'CLE-DU-COLLEGE' || $cle === 'CLE-DU-LYCEE'"
+        ".read": "$cle === 'CLE-DE-L-EVENEMENT' || $cle === 'CODE-ORGANISATEUR'",
+        ".write": "$cle === 'CLE-DE-L-EVENEMENT' || $cle === 'CODE-ORGANISATEUR'"
       }
     }
   }
