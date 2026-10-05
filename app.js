@@ -198,6 +198,8 @@ export function courseDeClasse(cfg,classe,sexe){
 }
 // Course d'un élève : tient compte du filtre filles/garçons éventuel.
 export const courseDe=(cfg,p)=>p?courseDeClasse(cfg,p.c,p.s||''):null;
+// Adulte : une ou plusieurs classes créditées, enregistrées « 601, 602 ».
+export const classesAdulte=p=>String(p&&p.cr||'').split(',').map(x=>x.trim()).filter(Boolean);
 // Niveaux réellement présents dans une course, dans l'ordre de ses réglages.
 export function niveauxPresents(cfg,id,classes){
   const ordre=niveauxDe(cfg.courses[id]), vus=[...new Set(classes.filter(c=>c.course===id).map(c=>c.niv))];
@@ -221,7 +223,7 @@ export function compute(state){
   const coursesDe=d=>{
     const p=P[d];
     if(p&&!p.a){ const c=courseDe(cfg,p); return c?[c]:[]; }
-    if(p&&p.a&&p.cr){ const c=courseDeClasse(cfg,p.cr); return c?[c]:started; }
+    if(p&&p.a&&p.cr){ const c=[...new Set(classesAdulte(p).map(x=>courseDeClasse(cfg,x)).filter(Boolean))]; return c.length?c:started; }
     return started;
   };
   const dans=(t,ids)=>ids.some(id=>win[id]&&t>=win[id].a&&t<=win[id].b);
@@ -269,7 +271,13 @@ export function compute(state){
   for(const d in lignes){
     const L=lignes[d], p=L.p; if(!p||p.st) continue;
     if(!p.a){ const o=classe(p.c); o.inscrits++; if(L.tours>0){ o.coureurs++; o.te+=L.tours; } }
-    else if(p.cr){ const o=classe(p.cr); o.ta+=L.tours; if(L.tours>0) o.adultes++; }
+    else if(p.cr){
+      // Un adulte peut courir pour plusieurs classes : ses tours s'ajoutent à chacune (hors moyenne).
+      // Si ces classes sont dans des courses différentes, chacune ne reçoit que les tours faits pendant sa course.
+      const cl=classesAdulte(p), co=new Set(cl.map(x=>courseDeClasse(cfg,x)));
+      for(const x of cl){ const o=classe(x), w=win[o.course];
+        const t=co.size<2?L.tours:(w?L.laps.filter(v=>v>=w.a&&v<=w.b).length:0);
+        o.ta+=t; if(t>0) o.adultes++; } }
   }
   // Moyenne = tours des élèves ÷ élèves ayant couru. Les tours des adultes comptent dans le total
   // (et les km) de la classe, mais pas dans sa moyenne : un adulte qui fait peu de tours ne la pénalise pas.

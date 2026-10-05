@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005b">
+<link rel="stylesheet" href="style.css?v=20261005c">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -70,10 +70,10 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   <!-- ADULTES ------------------------------------------------------------>
   <div class="card">
     <h2>Adultes (dossards 901 à 950)</h2>
-    <p>Attribuez un dossard à la volée. Les passages déjà faits avec ce dossard sont repris automatiquement.</p>
+    <p>Attribuez un dossard à la volée. Les passages déjà faits avec ce dossard sont repris automatiquement. Un adulte peut courir pour <b>plusieurs classes</b> : ses tours s'ajoutent à chacune, sans compter dans leur moyenne.</p>
     <div class="row">
       <input id="aD" inputmode="numeric" placeholder="901" style="width:100px">
-      <select id="aC"></select>
+      <details class="msel" id="aCbox"><summary id="aCsum">Aucune classe</summary><div id="aC"></div></details>
       <input id="aN" placeholder="Nom (facultatif)" style="flex:1;min-width:160px">
       <button class="btn primary" id="aSave">Enregistrer</button>
     </div>
@@ -161,7 +161,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005b';
+  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005c';
 
 navBar('admin.html');
 const store=await boot();
@@ -184,7 +184,7 @@ function drawCourses(){
   $('h1').textContent=cfg.titre||'Organisation du cross';
   $('courses').innerHTML=coursesOrdonnees(cfg).map(([id,c])=>{
     const cl=res.classes.filter(x=>x.course===id);
-    const tours=cl.reduce((a,x)=>a+x.total,0), run=cl.reduce((a,x)=>a+x.coureurs+x.adultes,0);
+    const P0=res.profs[id]||{n:0,total:0}, tours=cl.reduce((a,x)=>a+x.te,0)+P0.total, run=cl.reduce((a,x)=>a+x.coureurs,0)+P0.n;
     const AR=res.arrivees[id];
     const bilan=AR?`${AR.arrives.length} arrivé${AR.arrives.length>1?'s':''} sur ${AR.inscrits} inscrits${AR.arrives[0]&&AR.arrives[0].temps!=null?' · meilleur temps '+fmtChrono(AR.arrives[0].temps):''}`
       :`${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km`;
@@ -314,19 +314,24 @@ $('qOut').onclick=e=>{
 };
 
 // ================================================================= adultes
+const classesCochees=()=>[...document.querySelectorAll('#aC input:checked')].map(i=>i.value);
+function cocher(L){ document.querySelectorAll('#aC input').forEach(i=>i.checked=L.includes(i.value)); resumeClasses(); }
+function resumeClasses(){ const L=classesCochees(); $('aCsum').textContent=L.length?'Classe'+(L.length>1?'s':'')+' : '+L.join(', '):'Aucune classe'; }
+$('aC').onchange=resumeClasses;
+document.addEventListener('click',e=>{ if(!e.target.closest('#aCbox')) $('aCbox').open=false; });
 function fillClasses(){
-  const cur=$('aC').value;
+  const cur=classesCochees();
   // Les adultes ne courent qu'avec le collège : seules les classes du collège sont proposées.
   const cfg=readCfg(S.config);
   const cls=[...new Set(Object.values(S.participants).filter(p=>p&&!p.a&&!estLyceeClasse(cfg,p.c)).map(p=>p.c))]
     .sort((a,b)=>'6543'.indexOf(a[0])-'6543'.indexOf(b[0])||a.localeCompare(b,'fr',{numeric:true}));
-  const html='<option value="">Aucune classe (compté à part)</option>'+cls.map(c=>`<option${c===cur?' selected':''}>${esc(c)}</option>`).join('');
-  if($('aC').innerHTML!==html) $('aC').innerHTML=html;
+  const html=cls.map(c=>`<label><input type="checkbox" value="${esc(c)}"> ${esc(c)}</label>`).join('');
+  if($('aC').dataset.h!==html){ $('aC').dataset.h=html; $('aC').innerHTML=html||'<span class="small muted">Aucune classe</span>'; cocher(cur); }
   $('aHint').hidden=cls.length>0;
 }
 function drawAdults(){
   const A=Object.entries(S.participants).filter(([d,p])=>p.a).sort((a,b)=>a[0]-b[0]);
-  $('adults').innerHTML=A.length?'<table class="t"><tr><th>Dossard</th><th>Nom</th><th>Classe créditée</th><th>Tours</th><th></th></tr>'+
+  $('adults').innerHTML=A.length?'<table class="t"><tr><th>Dossard</th><th>Nom</th><th>Classe(s) créditée(s)</th><th>Tours</th><th></th></tr>'+
     A.map(([d,p])=>`<tr><td><b>${d}</b></td><td>${esc(p.n||'')}</td><td>${esc(p.cr||'aucune')}</td><td class="num">${res.lignes[d]?res.lignes[d].tours:0}</td>
       <td><button class="btn small" data-edit="${d}">Modifier</button> <button class="btn small danger" data-del="${d}">Retirer</button></td></tr>`).join('')+'</table>'
     :'<p class="muted small">Aucun adulte enregistré pour l\'instant.</p>';
@@ -334,13 +339,13 @@ function drawAdults(){
 $('aSave').onclick=()=>{
   const d=parseInt($('aD').value,10);
   if(!estAdulteNum(d)){ alert('Les dossards adultes vont de 901 à 950.'); return; }
-  const p={a:1}; if($('aC').value) p.cr=$('aC').value; if($('aN').value.trim()) p.n=$('aN').value.trim().slice(0,40);
-  store.update({['participants/'+d]:p}); $('aD').value=''; $('aN').value='';
+  const p={a:1}, cl=classesCochees(); if(cl.length) p.cr=cl.join(', '); if($('aN').value.trim()) p.n=$('aN').value.trim().slice(0,40);
+  store.update({['participants/'+d]:p}); $('aD').value=''; $('aN').value=''; cocher([]); $('aCbox').open=false;
 };
 $('adults').onclick=e=>{
   const b=e.target.closest('button'); if(!b) return;
   if(b.dataset.del&&confirm('Retirer l\'adulte '+b.dataset.del+' ? Ses passages redeviendront « non attribués ».')) store.update({['participants/'+b.dataset.del]:null});
-  if(b.dataset.edit){ const p=S.participants[b.dataset.edit]; $('aD').value=b.dataset.edit; $('aC').value=p.cr||''; $('aN').value=p.n||''; }
+  if(b.dataset.edit){ const p=S.participants[b.dataset.edit]; $('aD').value=b.dataset.edit; cocher(classesAdulte(p)); $('aN').value=p.n||''; }
 };
 
 // ================================================================= participants

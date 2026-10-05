@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005b">
+<link rel="stylesheet" href="style.css?v=20261005c">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -135,7 +135,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261005b';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261005c';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -209,7 +209,9 @@ $('go').onclick=()=>{
 // ---------- course aux tours (collège) : classes par niveau + défi des profs
 function drawTours(res,cfg,cid,co){
   const cl=res.classes.filter(c=>c.course===cid);
-  const tours=cl.reduce((a,c)=>a+c.total,0), run=cl.reduce((a,c)=>a+c.coureurs+c.adultes,0);
+  // Les adultes sont comptés une seule fois, même s'ils courent pour plusieurs classes.
+  const P0=res.profs[cid]||{n:0,total:0};
+  const tours=cl.reduce((a,c)=>a+c.te,0)+P0.total, run=cl.reduce((a,c)=>a+c.coureurs,0)+P0.n;
   const M=res.meilleurs[cid]||{}, E=M.eleve, A=M.adulte;
   // Nom en évidence, puis classe et numéro en petit. Élèves : noms chargés sur cet ordinateur ; adultes : nom saisi dans Organisation.
   const qui=L=>{ const p=L.p;
