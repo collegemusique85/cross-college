@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005c">
+<link rel="stylesheet" href="style.css?v=20261005d">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -149,6 +149,14 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <h3 style="font-size:16px">Réinitialiser</h3>
     <p class="muted">Pour repartir de zéro après un test. Les tablettes ouvertes se rechargent et oublient leurs anciens passages. Les réglages (titre, courses, durées) sont toujours conservés.</p>
     <div class="row">
+      <button class="btn" id="rCourses">Réinitialiser les courses…</button>
+      <button class="btn" id="rTabs">Réinitialiser les tablettes…</button>
+      <button class="btn" id="rCtrl">Réinitialiser le Contrôle…</button>
+    </div>
+    <p class="small muted" style="margin-top:6px">« Courses » : efface les heures de départ et de fin, pour redonner les départs (les passages déjà scannés ne comptent plus, puisqu'ils sont hors des nouvelles courses).
+    « Tablettes » : vide la liste des tablettes ; celles encore ouvertes y réapparaissent d'elles-mêmes au bout de quelques secondes.
+    « Contrôle » : annule les décisions du Contrôle (tours manquants validés ou refusés, corrections manuelles) ; les absents et dispensés restent.</p>
+    <div class="row" style="margin-top:12px">
       <button class="btn danger" id="reset">Effacer les passages…</button>
       <button class="btn danger" id="resetAll">Tout réinitialiser…</button>
     </div>
@@ -161,7 +169,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005c';
+  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261005d';
 
 navBar('admin.html');
 const store=await boot();
@@ -517,6 +525,21 @@ $('reset').onclick=()=>{
   const u={scans:null,corrections:null,devices:null,'config/resetAt':now()};
   for(const id in readCfg(S.config).courses){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
   store.update(u).then(()=>location.reload());
+};
+$('rCourses').onclick=()=>{
+  const C=readCfg(S.config).courses, n=Object.values(C).filter(c=>c.debut).length;
+  if(!confirm('Réinitialiser les courses ?\n\nLes heures de départ et de fin des '+n+' course(s) déjà parties sont effacées. Les élèves, adultes, absents et passages scannés sont conservés, mais les passages déjà faits ne compteront plus.')) return;
+  const u={}; for(const id in C){ u['config/courses/'+id+'/debut']=null; u['config/courses/'+id+'/fin']=null; }
+  store.update(u);
+};
+$('rTabs').onclick=()=>{
+  if(!confirm('Vider la liste des tablettes ?\n\nLes passages ne sont pas touchés. Les tablettes encore ouvertes réapparaîtront d\'elles-mêmes dans la liste.')) return;
+  store.update({devices:null});
+};
+$('rCtrl').onclick=()=>{
+  const n=Object.keys(S.corrections||{}).length;
+  if(!confirm('Réinitialiser le Contrôle ?\n\nLes '+n+' décision(s) enregistrée(s) sont annulées : tours manquants validés ou refusés, corrections manuelles. Les tours ajoutés à la main disparaissent des résultats. Les absents et dispensés restent.')) return;
+  store.update({corrections:null});
 };
 $('resetAll').onclick=()=>{
   const r=prompt('Tout effacer : élèves, adultes, absents, passages, corrections, heures de départ, tablettes et noms gardés sur cet ordinateur ?\nSeuls les réglages sont conservés. Pensez à télécharger les résultats avant.\n\nTapez TOUT EFFACER pour confirmer.');
