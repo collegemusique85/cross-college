@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005d">
+<link rel="stylesheet" href="style.css?v=20261006a">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -97,6 +97,20 @@
   .arr .nm small{display:block;font-size:.55em;color:#9AA3AB;font-weight:500}
   .arr .tp{font-size:clamp(20px,1.9vw,34px);font-weight:800;font-variant-numeric:tabular-nums}
   .arr.p1 .rk,.arr.p1 .nm{color:var(--vest)}
+  /* Lycée : 3 colonnes (places 1-20, 21-40, 20 dernières arrivées), une ligne par coureur, hauteur ajustée à l'écran */
+  body.lyc .scr{height:calc(100vh - 50px);min-height:0}
+  .cols.trois{grid-template-columns:repeat(3,minmax(0,1fr));align-content:stretch;flex:1 1 0;min-height:0;overflow:hidden}
+  .trois .col{display:grid;grid-template-rows:auto repeat(20,minmax(0,1fr));min-height:0;container-type:size;overflow:hidden}
+  .trois .col h2{margin-bottom:4px;font-size:clamp(16px,min(4.2cqh,5cqw),30px)}
+  .trois .arr{grid-template-columns:2.6em minmax(0,1fr) auto;gap:.6em;padding:0;font-size:clamp(11px,min(2vh,1.25vw),30px);font-size:clamp(11px,min(2.75cqh,4cqw),34px);border-bottom:1px dashed #2B333B}
+  .trois .arr .rk{font-size:1em}
+  .trois .arr .nm{font-size:1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .trois .arr .nm small{display:inline;font-size:.72em;margin-left:.5em}
+  .trois .arr .tp{font-size:1em}
+  .trois .col.recent{border-left:1px solid #2B333B;padding-left:clamp(12px,1.4vw,28px)}
+  .trois .recent .arr.nouv .nm,.trois .recent .arr.nouv .rk,.trois .recent .arr.nouv .tp{color:var(--go)}
+  .trois .recent .arr.flash{animation:arrive 1.6s ease-out}
+  @keyframes arrive{from{background:#2EE6A055}to{background:transparent}}
 
   .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#9AA3AB;font-size:clamp(12px,1vw,16px)}
   #feed{white-space:nowrap;overflow:hidden;flex:1;font-variant-numeric:tabular-nums}
@@ -135,7 +149,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261005d';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261006a';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -159,7 +173,7 @@ $('vue').onchange=e=>{ VUE=e.target.value; LS.set('cross.direct.vue',VUE); draw(
 
 function draw(){
   const res=compute(S), cfg=res.cfg, cid=courseId(cfg), co=cfg.courses[cid]||{nom:'Course',niveaux:''};
-  $('title').textContent=cfg.titre||'Cross du collège';
+  $('title').textContent=estArrivee(co)?'Cross lycée':(cfg.titre||'Cross du collège');
   $('kicker').textContent='En direct · '+(co.nom||'Course '+cid);
   controls(cfg,cid,co);
   if(estArrivee(co)) drawArrivee(res,cfg,cid,co); else drawTours(res,cfg,cid,co);
@@ -208,6 +222,7 @@ $('go').onclick=()=>{
 
 // ---------- course aux tours (collège) : classes par niveau + défi des profs
 function drawTours(res,cfg,cid,co){
+  $('cols').classList.remove('trois'); document.body.classList.remove('lyc');
   const cl=res.classes.filter(c=>c.course===cid);
   // Les adultes sont comptés une seule fois, même s'ils courent pour plusieurs classes.
   const P0=res.profs[cid]||{n:0,total:0};
@@ -279,6 +294,7 @@ function drawDefi(cl,pr,co){
 }
 
 // ---------- course au classement d'arrivée (lycée) : du premier au dernier scanné
+let dernierArr=null;
 function drawArrivee(res,cfg,cid,co){
   $('defi').hidden=true; document.body.classList.remove('compact');
   const A=res.arrivees[cid]||{inscrits:0,arrives:[]}, L=A.arrives;
@@ -286,16 +302,19 @@ function drawArrivee(res,cfg,cid,co){
   $('stats').innerHTML=stat(L.length,'arrivés','sArr')+stat(Math.max(0,A.inscrits-L.length),'encore en course','sRest')+stat(best,'meilleur temps');
   const ligne=(x,rk)=>{ const nm=nomCourt(x.d);
     return `<div class="arr${rk===1?' p1':''}"><div class="rk">${rk}</div>
-      <div class="nm">${nm?esc(nm):'Dossard '+x.d}<small>${esc(x.p.c)}${nm?' · n° '+x.d:''}</small></div>
+      <div class="nm">${nm?esc(nm):'Dossard '+x.d}<small>${esc(x.p.c)}</small></div>
       <div class="tp">${x.temps!=null?fmtChrono(x.temps):'—'}</div></div>`; };
-  const bloc=(titre,T,rk)=>`<div class="col"><h2><b>${titre}</b><span>${T.length} arrivé${T.length>1?'s':''}</span></h2>${
-    T.length?T.slice(0,10).map(x=>ligne(x,rk(x))).join(''):'<div class="empty">Personne pour l\'instant.</div>'}</div>`;
-  const F=L.filter(x=>x.p.s==='F'), G=L.filter(x=>x.p.s==='G'), sansSexe=L.filter(x=>x.p.s!=='F'&&x.p.s!=='G');
-  let h=(co.sexe!=='G'?bloc('Filles',F,x=>x.rangSexe):'')+(co.sexe!=='F'?bloc('Garçons',G,x=>x.rangSexe):'');
-  if(sansSexe.length||(!F.length&&!G.length&&L.length)) h+=bloc('Scratch',L,x=>x.rang);
+  // Une course du lycée = un sexe : le rang dans la course est le rang d'arrivée.
+  const T=L.map((x,i)=>({...x,rc:i+1})), lab=co.sexe==='F'?'Filles':co.sexe==='G'?'Garçons':'Arrivées';
+  const col=(titre,info,rows,cls)=>`<div class="col${cls?' '+cls:''}"><h2><b>${titre}</b><span>${info}</span></h2>${rows}</div>`;
+  const vide='<div class="empty">Personne pour l\'instant.</div>';
+  const recents=T.slice(-20).reverse(), nv=recents[0]?recents[0].d:null, flash=nv!==dernierArr; dernierArr=nv;
+  const h=col(lab+' · 1 à 20',T.length+' arrivé'+(co.sexe==='F'?'e':'')+(T.length>1?'s':''),T.slice(0,20).map(x=>ligne(x,x.rc)).join('')||vide)
+    +col('21 à 40','',T.slice(20,40).map(x=>ligne(x,x.rc)).join(''))
+    +col('Dernières arrivées',recents.length?'les 20 dernières':'',recents.map((x,i)=>ligne(x,x.rc).replace('class="arr','class="arr'+(i===0?' nouv'+(flash?' flash':''):''))).join('')||vide,'recent');
+  $('cols').classList.add('trois'); document.body.classList.add('lyc');
   $('cols').innerHTML=co.debut||L.length?h:'<div class="empty">Course au classement d\'arrivée : le premier dossard scanné après le départ est premier, et ainsi de suite.</div>';
-  const last=L.slice(-12).reverse();
-  $('feed').innerHTML=last.length?'Dernières arrivées : '+last.map(x=>'<em>'+x.rang+'. '+esc(nomCourt(x.d)||'n° '+x.d)+'</em>').join(''):'';
+  $('feed').innerHTML='';
 }
 
 function tick(){

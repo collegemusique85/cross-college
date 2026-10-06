@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Podiums — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261005d">
+<link rel="stylesheet" href="style.css?v=20261006a">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh}
   .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,24px);min-height:100vh}
@@ -84,7 +84,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,suivreNoms,publierNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,LS,navBar} from './app.js?v=20261005d';
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,classesLyceeCourse,classesLyceeNiveau,niveauxLyceePresents,NB_CLASSE_COURSE,NB_CLASSE_NIV,LS,navBar} from './app.js?v=20261006a';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -100,7 +100,7 @@ function later(){ if(!tm) tm=setTimeout(()=>{ tm=null; res=compute(S); draw(); }
 // ------------------------------------------------------------ catégories
 const CATS_T=[['F','Groupes filles','g'],['G','Groupes garçons','g'],['M','Groupes mixtes','g'],['C','Classes'],
   ['iF','Filles'],['iG','Garçons'],['iT','Tous les élèves'],['iR','Tours les plus rapides'],['AD','Adultes']];
-const CATS_A=[['F','Filles'],['G','Garçons'],['S','Général']];
+const CATS_A=[['F','Filles'],['G','Garçons'],['S','Général'],['CL','Classes']];
 const RK='cross.podium2.'+store.key;
 let st=Object.assign({sec:null,cat:'F',cl:''},LS.get(RK,{}));
 const save=()=>LS.set(RK,st);
@@ -119,11 +119,15 @@ function sections(){
     for(const n of N) niv.push({k:'n:'+id+':'+n,ids:[id],niv:[n],lab:libNiveau(n)});
     if(N.length>1) comb.push({k:'c:'+id,ids:[id],niv:N,comb:true,lab:N.map(kLab).join('-')});
   }
+  // Lycée : classement des classes par niveau, filles et garçons ensemble
+  const NIVLAB={'2':'2de - CAP1','1':'1re - CAP2','T':'Terminales'};
+  if(LY.length) for(const n of niveauxLyceePresents(res,LY)) lyc.push({k:'lycN:'+n,ids:LY,arr:true,nivL:n,nivB:true,lab:'Classes '+(NIVLAB[n]||libNivLycee(n))});
   if(!lyc.length) lyc.push({k:'lycee',vide:true,lab:'Lycée'});
   return [...niv,...comb,...lyc];
 }
 // Lycée : une course = un sexe ; la 3PM (filles 2 tours, garçons 3 tours) n'a pas de classement mixte.
-const catsDe=sec=>!sec?[]:sec.vide?[]:sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe):CATS_A.filter(c=>c[0]!=='S'))
+const catsDe=sec=>!sec?[]:sec.vide?[]:sec.nivB?[['N',NB_CLASSE_NIV+' filles + '+NB_CLASSE_NIV+' garçons']]
+  :sec.arr?(sec.sexe?CATS_A.filter(c=>c[0]===sec.sexe||c[0]==='CL'):CATS_A.filter(c=>c[0]!=='S'))
   :CATS_T.filter(c=>c[0]!=='AD'||sec.comb);
 // Section « Lycée » : tout le lycée, 3PM comprise (qui a aussi son bouton à part).
 const dansSec=(sec,p)=>p&&!p.a&&(sec.arr?sec.ids.includes(courseDe(res.cfg,p))&&(!sec.nivL||niveauLycee(p.c)===sec.nivL)
@@ -134,6 +138,22 @@ const qui=L=>nomDe(noms,L)||(L.p&&L.p.a?'Adulte n° '+L.d:'Dossard '+L.d);
 // Une liste = {rows:[{lab,sub,score,rang,cells:[]}], cols:[], note}
 function liste(sec){
   const cfg=res.cfg, cat=st.cat, fcl=st.cl;
+  if(sec.arr&&(cat==='CL'||cat==='N')){
+    const pl=n=>n+(n===1?'re':'e'), num=v=>String(v).replace('.',',');
+    let r=0; const rows=[];
+    if(cat==='CL'){
+      for(const o of classesLyceeCourse(res,sec.ids[0])) rows.push({mauv:!o.complet,rang:o.complet?++r:'—',lab:o.c,sub:'places '+o.retenus.map(pl).join(', '),score:o.score+' pts',
+        cells:[o.c,o.complet?o.score+' pts':'incomplète ('+o.n+' arrivé'+(o.n>1?'s':'')+')',o.retenus.map(pl).join(' · '),o.n+' / '+o.inscrits]});
+      return {cols:['Rang','Classe','Points','Places retenues','Arrivés / inscrits'],rows,podium:rows.filter(x=>!x.mauv),
+        note:'Points = somme des places des '+NB_CLASSE_COURSE+' premiers arrivés de la classe dans cette course ; le plus petit total gagne. Une classe avec moins de '+NB_CLASSE_COURSE+' arrivés n\'est pas classée.'};
+    }
+    const fx=L=>L.map(x=>pl(x.place)+'/'+x.classes).join(' · ');
+    for(const o of classesLyceeNiveau(res,sec.ids,sec.nivL)) rows.push({mauv:!o.complet,rang:o.complet?++r:'—',lab:o.c,
+      sub:'filles '+o.F.map(x=>pl(x.place)).join(', ')+' · garçons '+o.G.map(x=>pl(x.place)).join(', '),score:num(o.score)+' pts',
+      cells:[o.c,o.complet?num(o.score)+' pts':'incomplète ('+o.nF+' F, '+o.nG+' G)',fx(o.F)||'—',fx(o.G)||'—',o.n+' / '+o.inscrits]});
+    return {cols:['Rang','Classe','Points','Filles retenues (place / classées)','Garçons retenus (place / classés)','Arrivés / inscrits'],rows,podium:rows.filter(x=>!x.mauv),
+      note:'Calcul UNSS lycée : chaque élève marque place ÷ nombre de classés de sa course × 100. Points de la classe = ses '+NB_CLASSE_NIV+' meilleures filles + ses '+NB_CLASSE_NIV+' meilleurs garçons ; le plus petit total gagne. Il faut au moins '+NB_CLASSE_NIV+' filles et '+NB_CLASSE_NIV+' garçons arrivés pour être classé.'};
+  }
   if(sec.arr){
     // ordre d'arrivée ; le rang est recalculé dans la sélection (niveau, classe, sexe)
     const A=classementLycee(res,sec.ids).filter(x=>dansSec(sec,x.p));
@@ -212,7 +232,7 @@ function draw(){
     .sort((a,b)=>a.localeCompare(b,'fr',{numeric:true})):[];
   if(st.cl&&!cls.includes(st.cl)) st.cl='';
   $('clSel').innerHTML='<option value="">Toutes</option>'+cls.map(c=>`<option${c===st.cl?' selected':''}>${esc(c)}</option>`).join('');
-  $('clW').hidden=!sec||sec.vide||['C','AD'].includes(st.cat);
+  $('clW').hidden=!sec||sec.vide||['C','AD','CL','N'].includes(st.cat);
   $('csvLy').hidden=!(sec&&sec.arr); $('xlsLyCl').hidden=!(sec&&sec.arr); $('xlsCl').hidden=!!(sec&&(sec.arr||sec.vide));
   if(!sec||sec.vide){ $('kicker').textContent='Lycée'; $('catTitle').innerHTML='Le lycée n\'est pas encore configuré <span>— Organisation › Réglages</span>';
     $('podium').innerHTML=''; $('table').innerHTML=''; $('note').textContent=''; save(); return; }
