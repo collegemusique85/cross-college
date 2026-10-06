@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dossards — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261006a">
+<link rel="stylesheet" href="style.css?v=20261006b">
 <style>
   /* Feuille dessinée à 190 × 270 mm : elle tient dans une A4 même si le navigateur
      ajoute ses propres marges (Safari), au lieu de déborder et de décaler toutes les pages. */
@@ -77,7 +77,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,getNoms,setNoms,suivreNoms,publierNoms,orgKey,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261006a';
+import {$,esc,boot,getNoms,setNoms,suivreNoms,publierNoms,orgKey,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261006b';
 navBar('dossards.html');
 const store=await boot();
 let noms=getNoms(store.key), etatNoms='local';

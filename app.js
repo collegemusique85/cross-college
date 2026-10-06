@@ -570,24 +570,29 @@ export const NB_CLASSE_COURSE=3, NB_CLASSE_NIV=3;
 const ordreClasses=(a,b)=>(b.complet-a.complet)||(a.complet?a.score-b.score||a.dep-b.dep:b.n-a.n||a.score-b.score)||a.c.localeCompare(b.c,'fr',{numeric:true});
 export function classesLyceeCourse(res,id,N=NB_CLASSE_COURSE){
   const A=classementLycee(res,[id]), cl={};
-  for(const x of A){ const o=cl[x.p.c]||(cl[x.p.c]={c:x.p.c,places:[]}); o.places.push(x.rangCourse); }
+  for(const x of A){ const o=cl[x.p.c]||(cl[x.p.c]={c:x.p.c,el:[]}); o.el.push({d:x.d,p:x.p,place:x.rangCourse}); }
   const ins={}; for(const x of Object.values(res.lignes)) if(x.p&&!x.p.a&&!x.p.st&&courseDe(res.cfg,x.p)===id) ins[x.p.c]=(ins[x.p.c]||0)+1;
-  return Object.values(cl).map(o=>{ const P=o.places.sort((a,b)=>a-b).slice(0,N);
-    return {c:o.c,retenus:P,n:o.places.length,inscrits:ins[o.c]||0,complet:P.length>=N,score:P.reduce((a,b)=>a+b,0),dep:P[P.length-1]||0}; })
+  return Object.values(cl).map(o=>{ const E=o.el.sort((a,b)=>a.place-b.place).slice(0,N), P=E.map(x=>x.place);
+    return {c:o.c,retenus:P,el:E,n:o.el.length,inscrits:ins[o.c]||0,complet:P.length>=N,score:P.reduce((a,b)=>a+b,0),dep:P[P.length-1]||0}; })
     .sort(ordreClasses);
 }
 // Par niveau (filles et garçons ensemble), calcul UNSS lycée : points = place ÷ nombre de classés de sa course × 100.
 // Score de la classe = somme des points de ses 3 meilleures filles et de ses 3 meilleurs garçons ; le plus petit gagne.
+// Classe qui n'a pas 3 filles et 3 garçons arrivés (classe non mixte…) : ses 6 meilleurs élèves, quel que soit le sexe.
 export function classesLyceeNiveau(res,ids,niv,N=NB_CLASSE_NIV){
   ids=[].concat(ids||idsLycee(res.cfg));
   const A=classementLycee(res,ids).filter(x=>niveauLycee(x.p.c)===niv), nb={}, cl={};
   for(const id of ids) nb[id]=(res.arrivees[id]||{arrives:[]}).arrives.length;
   for(const x of A){ const o=cl[x.p.c]||(cl[x.p.c]={c:x.p.c,F:[],G:[]}); const k=x.p.s==='F'?'F':x.p.s==='G'?'G':null; if(!k) continue;
-    o[k].push({d:x.d,place:x.rangCourse,classes:nb[x.course],pts:Math.round(x.rangCourse/nb[x.course]*1000)/10}); }
+    o[k].push({d:x.d,p:x.p,s:k,place:x.rangCourse,classes:nb[x.course],pts:Math.round(x.rangCourse/nb[x.course]*1000)/10}); }
   const ins={}; for(const x of Object.values(res.lignes)) if(x.p&&!x.p.a&&!x.p.st&&ids.includes(courseDe(res.cfg,x.p))&&niveauLycee(x.p.c)===niv) ins[x.p.c]=(ins[x.p.c]||0)+1;
-  return Object.values(cl).map(o=>{ const f=o.F.sort((a,b)=>a.pts-b.pts).slice(0,N), g=o.G.sort((a,b)=>a.pts-b.pts).slice(0,N);
-    const R=[...f,...g], sc=Math.round(R.reduce((a,b)=>a+b.pts,0)*10)/10;
-    return {c:o.c,F:f,G:g,nF:o.F.length,nG:o.G.length,n:o.F.length+o.G.length,inscrits:ins[o.c]||0,complet:f.length>=N&&g.length>=N,score:sc,dep:Math.max(0,...R.map(x=>x.pts))}; })
+  const tri=(a,b)=>a.pts-b.pts;
+  return Object.values(cl).map(o=>{ o.F.sort(tri); o.G.sort(tri);
+    const mixte=o.F.length>=N&&o.G.length>=N;
+    const R=mixte?[...o.F.slice(0,N),...o.G.slice(0,N)]:[...o.F,...o.G].sort(tri).slice(0,2*N);
+    const sc=Math.round(R.reduce((a,b)=>a+b.pts,0)*10)/10;
+    return {c:o.c,el:R,F:R.filter(x=>x.s==='F'),G:R.filter(x=>x.s==='G'),mode:mixte?'mixte':'6',nF:o.F.length,nG:o.G.length,n:o.F.length+o.G.length,
+      inscrits:ins[o.c]||0,complet:R.length>=2*N,score:sc,dep:Math.max(0,...R.map(x=>x.pts))}; })
     .sort(ordreClasses);
 }
 export const niveauxLyceePresents=(res,ids)=>ORDRE_LYCEE.filter(n=>n!=='3PM'&&Object.values(res.lignes).some(x=>x.p&&!x.p.a&&ids.includes(courseDe(res.cfg,x.p))&&niveauLycee(x.p.c)===n));
@@ -614,14 +619,15 @@ export function exportLyceeParClasse(res,noms,ids){
   XLSX.utils.book_append_sheet(wb,ws,'Synthèse'); wb.SheetNames.unshift(wb.SheetNames.pop());
   // Classements des classes : par niveau (3 filles + 3 garçons, points UNSS) et par course (3 premières places)
   const fr=v=>String(v).replace('.',',');
-  const cn=[['Classement des classes par niveau : somme des points des 3 meilleures filles et des 3 meilleurs garçons (point = place ÷ classés de la course × 100 ; le plus petit total gagne)'],[],
-    ['Niveau','Rang','Classe','Points','Filles retenues (place / classées)','Garçons retenus (place / classés)','Arrivés / inscrits']];
+  const nm=x=>{ const n=noms[x.d]; return (n?((n.prenom||'')+' '+(n.nom||'')).trim():'n° '+x.d); };
+  const cn=[['Classement des classes par niveau : somme des points des 3 meilleures filles et des 3 meilleurs garçons (classe non mixte ou incomplète : ses 6 meilleurs élèves) ; point = place ÷ classés de la course × 100 ; le plus petit total gagne'],[],
+    ['Niveau','Rang','Classe','Points','Calcul','Filles retenues (place / classées)','Garçons retenus (place / classés)','Arrivés / inscrits']];
   for(const n of niveauxLyceePresents(res,ids)){ let r=0;
-    for(const o of classesLyceeNiveau(res,ids,n)) cn.push([libNivLycee(n),o.complet?++r:'incomplète',o.c,fr(o.score),o.F.map(x=>x.place+'/'+x.classes).join(' · '),o.G.map(x=>x.place+'/'+x.classes).join(' · '),o.n+' / '+o.inscrits]); }
-  const w2=XLSX.utils.aoa_to_sheet(cn); w2['!cols']=[10,10,10,9,34,34,14].map(w=>({wch:w}));
-  const cc=[['Classement des classes par course : somme des places des 3 premiers arrivés de la classe (le plus petit total gagne)'],[],['Course','Rang','Classe','Points','Places retenues','Arrivés / inscrits']];
-  for(const id of ids){ let r=0; for(const o of classesLyceeCourse(res,id)) cc.push([cfg.courses[id].nom,o.complet?++r:'incomplète',o.c,o.score,o.retenus.join(' · '),o.n+' / '+o.inscrits]); }
-  const w3=XLSX.utils.aoa_to_sheet(cc); w3['!cols']=[22,10,10,9,22,14].map(w=>({wch:w}));
+    for(const o of classesLyceeNiveau(res,ids,n)) cn.push([libNivLycee(n),o.complet?++r:'incomplète',o.c,fr(o.score),o.mode==='mixte'?'3 F + 3 G':'6 meilleurs',o.F.map(x=>nm(x)+' ('+x.place+'/'+x.classes+')').join(' · '),o.G.map(x=>nm(x)+' ('+x.place+'/'+x.classes+')').join(' · '),o.n+' / '+o.inscrits]); }
+  const w2=XLSX.utils.aoa_to_sheet(cn); w2['!cols']=[10,10,10,9,12,60,60,14].map(w=>({wch:w}));
+  const cc=[['Classement des classes par course : somme des places des 3 premiers arrivés de la classe (le plus petit total gagne)'],[],['Course','Rang','Classe','Points','Élèves retenus (place)','Arrivés / inscrits']];
+  for(const id of ids){ let r=0; for(const o of classesLyceeCourse(res,id)) cc.push([cfg.courses[id].nom,o.complet?++r:'incomplète',o.c,o.score,o.el.map(x=>nm(x)+' ('+x.place+')').join(' · '),o.n+' / '+o.inscrits]); }
+  const w3=XLSX.utils.aoa_to_sheet(cc); w3['!cols']=[22,10,10,9,70,14].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb,w3,'Classes par course'); wb.SheetNames.splice(1,0,wb.SheetNames.pop());
   XLSX.utils.book_append_sheet(wb,w2,'Classes par niveau'); wb.SheetNames.splice(1,0,wb.SheetNames.pop());
   const d=new Date();
