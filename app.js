@@ -361,18 +361,9 @@ export function compute(state){
     const att=co.controle, actif=att>0&&L.some(x=>x.ctrl&&x.ctrl.length);
     arrivees[id].controle={att,actif};
     if(!actif) continue;
-    const M=v=>{ const t=[...v].sort((a,b)=>a-b), n=t.length; return n?(n%2?t[(n-1)/2]:(t[n/2-1]+t[n/2])/2):null; };
     for(const x of arr){ x.passages=x.ctrl.filter(t=>t<x.first); x.raisons=[];
       if(x.passages.length<att) x.raisons.push({k:'ctrl',n:x.passages.length,att}); }
-    // Tour anormalement rapide : un intervalle (départ → contrôle → … → arrivée) < 60 % de la médiane des autres pour le même tronçon.
-    const comp=arr.filter(x=>x.passages.length===att&&co.debut);
-    for(let i=0;i<=att;i++){
-      const seg=x=>{ const pts=[co.debut,...x.passages,x.first]; return pts[i+1]-pts[i]; };
-      const vals=comp.map(seg); if(vals.length<5) continue; const med=M(vals);
-      for(const x of comp){ const v=seg(x); if(v<0.6*med) x.raisons.push({k:'rapide',i,v,med}); }
-    }
-    // Avance anormale : le premier a plus de 10 % d'avance sur le deuxième.
-    if(arr.length>=5&&arr[0].temps!=null&&arr[1].temps!=null&&arr[0].temps<0.9*arr[1].temps) arr[0].raisons.push({k:'avance',v:arr[0].temps,ref:arr[1].temps});
+    // (07/10) Règles « tronçon trop rapide » et « avance du premier » retirées : seuls les passages manquants sont signalés.
     for(const x of arr) if(x.raisons.length) x.doute={raisons:x.raisons,leve:leves.has(String(x.d))};
   }
 

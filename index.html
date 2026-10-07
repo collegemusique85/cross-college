@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cross du collège</title>
-<link rel="stylesheet" href="style.css?v=20261007d">
+<link rel="stylesheet" href="style.css?v=20261007e">
 <style>
   .menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
   .menu a{display:flex;flex-direction:column;gap:6px;text-decoration:none;background:var(--paper2);border:1px solid var(--line);border-radius:14px;padding:18px}
@@ -34,7 +34,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   </div>
 </div>
 <script type="module">
-import {$,boot,askKey,readCfg,navBar} from './app.js?v=20261007d';
+import {$,boot,askKey,readCfg,navBar} from './app.js?v=20261007e';
 navBar('index.html');
 const store=await boot();
 $('sub').textContent='Clé : '+store.key+' · '+(store.mode==='local'?'mode local':'synchronisé');
