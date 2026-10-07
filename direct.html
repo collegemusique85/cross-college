@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007a">
+<link rel="stylesheet" href="style.css?v=20261007b">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -149,7 +149,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261007a';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261007b';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -259,7 +259,9 @@ function drawTours(res,cfg,cid,co){
 
   drawDefi(cl,pr,co);
   // derniers tours réellement comptés (pas les relectures)
-  const feed=Object.values(S.scans).filter(s=>res.compte.has(s.id)).sort((a,b)=>b.t-a.t).slice(0,30)
+  // seulement les tours de la course affichée (pas ceux d'une course précédente, du lycée par exemple)
+  const w=res.win[cid];
+  const feed=Object.values(S.scans).filter(s=>res.compte.has(s.id)&&w&&s.t>=w.a&&s.t<=w.b).sort((a,b)=>b.t-a.t).slice(0,30)
     .map(s=>{ const p=S.participants[s.d]; return p?(p.a?(p.cr||'Prof'):p.c):null; }).filter(Boolean);
   $('feed').innerHTML=feed.length?'Derniers tours : '+feed.map(x=>'<em>'+esc(x)+'</em>').join(''):'';
 }
