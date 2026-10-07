@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>En direct — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007c">
+<link rel="stylesheet" href="style.css?v=20261007d">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh;overflow-x:hidden}
   .scr{padding:clamp(16px,2.4vw,40px);padding-top:clamp(10px,1.4vw,22px);display:flex;flex-direction:column;gap:clamp(14px,2vh,26px);min-height:calc(100vh - 50px)}
@@ -110,6 +110,7 @@
   .trois .col.recent{border-left:1px solid #2B333B;padding-left:clamp(12px,1.4vw,28px)}
   .trois .recent .arr.nouv .nm,.trois .recent .arr.nouv .rk,.trois .recent .arr.nouv .tp{color:var(--go)}
   .trois .recent .arr.flash{animation:arrive 1.6s ease-out}
+  .arr .dt{color:#F28C28;margin-right:.3em}
   @keyframes arrive{from{background:#2EE6A055}to{background:transparent}}
 
   .foot{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#9AA3AB;font-size:clamp(12px,1vw,16px)}
@@ -149,7 +150,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 </div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261007c';
+import {$,esc,boot,compute,readCfg,niveauxDe,niveauxPresents,libNiveau,estArrivee,getNoms,setNoms,suivreNoms,publierNoms,douteOuvert,libDoute,parseWorkbook,prepareImport,fmtChrono,fr1,navBar,LS} from './app.js?v=20261007d';
 
 navBar('direct.html',true);
 const store=await boot();
@@ -301,10 +302,12 @@ function drawArrivee(res,cfg,cid,co){
   $('defi').hidden=true; document.body.classList.remove('compact');
   const A=res.arrivees[cid]||{inscrits:0,arrives:[]}, L=A.arrives;
   const best=L.length&&L[0].temps!=null?fmtChrono(L[0].temps):'—';
-  $('stats').innerHTML=stat(L.length,'arrivés','sArr')+stat(Math.max(0,A.inscrits-L.length),'encore en course','sRest')+stat(best,'meilleur temps');
+  const nDoute=L.filter(douteOuvert).length;
+  $('stats').innerHTML=stat(L.length,'arrivés','sArr')+stat(Math.max(0,A.inscrits-L.length),'encore en course','sRest')+stat(best,'meilleur temps')
+    +(A.controle&&A.controle.actif?stat(nDoute?'⚠ '+nDoute:'0','à vérifier (contrôle)'):'');
   const ligne=(x,rk)=>{ const nm=nomCourt(x.d);
     return `<div class="arr${rk===1?' p1':''}"><div class="rk">${rk}</div>
-      <div class="nm">${nm?esc(nm):'Dossard '+x.d}<small>${esc(x.p.c)}</small></div>
+      <div class="nm"${douteOuvert(x)?' title="'+esc(libDoute(x))+'"':''}>${douteOuvert(x)?'<span class="dt">⚠</span>':''}${nm?esc(nm):'Dossard '+x.d}<small>${esc(x.p.c)}</small></div>
       <div class="tp">${x.temps!=null?fmtChrono(x.temps):'—'}</div></div>`; };
   // Une course du lycée = un sexe : le rang dans la course est le rang d'arrivée.
   const T=L.map((x,i)=>({...x,rc:i+1})), lab=co.sexe==='F'?'Filles':co.sexe==='G'?'Garçons':'Arrivées';

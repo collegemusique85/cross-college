@@ -165,6 +165,8 @@ export function readCfg(raw){
       o.duree=Math.max(0,+o.duree||0);
       // Décision du 05/10 : la 3PM court avec les 4e-3e ; on la retire des courses du lycée déjà enregistrées.
       if(o.type==='arrivee'&&/3PM/i.test(o.niveaux||'')) o.niveaux=String(o.niveaux).split(',').filter(x=>x.trim().toUpperCase()!=='3PM').join(',');
+      // Point de contrôle (lycée) : passages attendus avant l'arrivée ; par défaut 2 pour les filles, 3 pour les garçons, 0 = sans contrôle.
+      if(o.type==='arrivee') o.controle=o.controle!=null&&o.controle!==''?Math.max(0,+o.controle||0):(o.sexe==='G'?3:o.sexe==='F'?2:0); else o.controle=0;
       if(!o.off) c.courses[id]=o; }   // off:true = course supprimée
   for(const k of ['absence','plafond','boucle','delai']) c[k]=+c[k]||0;
   if(!c.absence) c.absence=60;
@@ -237,7 +239,10 @@ export function compute(state){
   }
   const ABS=cfg.absence*1000, R={}, compte=new Set();
   for(const d in par){
-    const list=par[d].sort((a,b)=>a.t-b.t), ids=coursesDe(d);
+    const tous=par[d].sort((a,b)=>a.t-b.t), ids=coursesDe(d);
+    const list=tous.filter(s=>!s.pc), ctrl=[];
+    // Point de contrôle du lycée : passages dédoublonnés (plusieurs tablettes au même endroit = un seul passage)
+    { let der=-Infinity; for(const s of tous) if(s.pc&&dans(s.t,ids)){ if(s.t-der>ABS) ctrl.push(s.t); der=s.t; } }
     let dernier=-Infinity, first=null, last=null; const laps=[], hors=[];
     for(const s of list){
       if(!dans(s.t,ids)){ hors.push(s); continue; }
@@ -249,15 +254,15 @@ export function compute(state){
     let mauvaise=null; const p0=P[d];
     if(p0&&!p0.a) for(const s of hors){ const autre=Object.keys(win).find(id=>!ids.includes(id)&&s.t>=win[id].a&&s.t<=win[id].b);
       if(autre){ mauvaise={course:autre,t:s.t,v:s.v||''}; break; } }
-    R[d]={laps,first,last,nScans:list.length,hors:hors.length,mauvaise};
+    R[d]={laps,first,last,nScans:list.length,hors:hors.length,mauvaise,ctrl};
   }
   const estAd=d=>{ const p=P[d]; return p?!!p.a:estAdulteNum(+d); };
-  const corr={};
-  for(const k in C){ const c=C[k]; if(c&&c.d!=null) corr[c.d]=(corr[c.d]||0)+(+c.delta||0); }
+  const corr={}, leves=new Set();
+  for(const k in C){ const c=C[k]; if(c&&c.d!=null){ corr[c.d]=(corr[c.d]||0)+(+c.delta||0); if(c.leve) leves.add(String(c.d)); } }
 
   const lignes={};
   for(const d of new Set([...Object.keys(P),...Object.keys(R)])){
-    const r=R[d]||{laps:[],first:null,last:null,nScans:0,hors:0,mauvaise:null}, p=P[d]||null;
+    const r=R[d]||{laps:[],first:null,last:null,nScans:0,hors:0,mauvaise:null,ctrl:[]}, p=P[d]||null;
     const iv=[]; for(let i=1;i<r.laps.length;i++) iv.push(r.laps[i]-r.laps[i-1]);
     const c=corr[d]||0;
     lignes[d]={ d:+d, p, ...r, iv, corr:c, tours:Math.max(0,r.laps.length+c),
@@ -352,6 +357,23 @@ export function compute(state){
     arr.forEach((x,i)=>{ x.rang=i+1; x.temps=co.debut?x.first-co.debut:null;
       if(x.p.s) x.rangSexe=++parSexe[x.p.s]; });
     arrivees[id]={inscrits:L.length,arrives:arr};
+    // Point de contrôle : actif dès qu'au moins un passage de contrôle a été scanné pour cette course.
+    const att=co.controle, actif=att>0&&L.some(x=>x.ctrl&&x.ctrl.length);
+    arrivees[id].controle={att,actif};
+    if(!actif) continue;
+    const M=v=>{ const t=[...v].sort((a,b)=>a-b), n=t.length; return n?(n%2?t[(n-1)/2]:(t[n/2-1]+t[n/2])/2):null; };
+    for(const x of arr){ x.passages=x.ctrl.filter(t=>t<x.first); x.raisons=[];
+      if(x.passages.length<att) x.raisons.push({k:'ctrl',n:x.passages.length,att}); }
+    // Tour anormalement rapide : un intervalle (départ → contrôle → … → arrivée) < 60 % de la médiane des autres pour le même tronçon.
+    const comp=arr.filter(x=>x.passages.length===att&&co.debut);
+    for(let i=0;i<=att;i++){
+      const seg=x=>{ const pts=[co.debut,...x.passages,x.first]; return pts[i+1]-pts[i]; };
+      const vals=comp.map(seg); if(vals.length<5) continue; const med=M(vals);
+      for(const x of comp){ const v=seg(x); if(v<0.6*med) x.raisons.push({k:'rapide',i,v,med}); }
+    }
+    // Avance anormale : le premier a plus de 10 % d'avance sur le deuxième.
+    if(arr.length>=5&&arr[0].temps!=null&&arr[1].temps!=null&&arr[0].temps<0.9*arr[1].temps) arr[0].raisons.push({k:'avance',v:arr[0].temps,ref:arr[1].temps});
+    for(const x of arr) if(x.raisons.length) x.doute={raisons:x.raisons,leve:leves.has(String(x.d))};
   }
 
   const totaux={passages:0};
@@ -521,6 +543,15 @@ export function rangsIndiv(L){ let r=0,prev=null; return L.map((x,i)=>{ const k=
   if(k!==prev){ r=i+1; prev=k; } return r; }); }
 export const mmss = ms => ms==null?'':fmtChrono(ms);
 // « Pas dans la bonne course » : libellé pour les tableaux et les exports.
+// Point de contrôle du lycée : texte du doute, et doute encore ouvert (non levé).
+export const douteOuvert=x=>!!(x&&x.doute&&!x.doute.leve);
+export function libDoute(x){
+  if(!x||!x.doute) return '';
+  const ord=n=>n+(n===1?'er':'e');
+  return x.doute.raisons.map(r=>r.k==='ctrl'?r.n+' passage'+(r.n>1?'s':'')+' sur '+r.att+' au contrôle'
+    :r.k==='rapide'?(r.i===0?'départ → 1er contrôle':r.i===(x.passages||[]).length?'dernier contrôle → arrivée':ord(r.i)+' → '+ord(r.i+1)+' contrôle')+' en '+fmtChrono(r.v)+' (habituellement '+fmtChrono(r.med)+')'
+    :r.k==='avance'?'temps très en avance sur le 2e ('+fmtChrono(r.v)+' contre '+fmtChrono(r.ref)+')':'').join(' · ')+(x.doute.leve?' — doute levé':'');
+}
 export const libMauvaise = (cfg,L) => L&&L.mauvaise?'pas dans la bonne course (scanné pendant « '+((cfg.courses[L.mauvaise.course]||{}).nom||'?')+' » à '+fmtHeure(L.mauvaise.t)+')':'';
 
 // ---------------------------------------------------------------- lycée : classements à l'arrivée
@@ -558,9 +589,9 @@ export function exportLyceeCSV(res,noms,ids){
   const cfg=res.cfg, L=classementLycee(res,ids), vu=new Set(L.map(x=>x.d));
   const q=v=>{ v=v==null?'':String(v); return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
   // Fichier « tout le lycée » : trié au temps, avec le rang dans sa course et les rangs sur tout le lycée.
-  const lig=[['Course','Rang dans la course','Rang lycée (tous)','Rang lycée filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut']];
+  const lig=[['Course','Rang dans la course','Rang lycée (tous)','Rang lycée filles/garçons','Rang niveau (même sexe)','Rang classe (même sexe)','Dossard','Nom','Prénom','Classe','Niveau','Sexe','Temps','Heure d\'arrivée','Statut','Point de contrôle']];
   for(const x of L){ const n=noms[x.d]||{};
-    lig.push([cfg.courses[x.course].nom,x.rangCourse,x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé']); }
+    lig.push([cfg.courses[x.course].nom,x.rangCourse,x.rang,x.rangSexe||'',x.rangNiv||'',x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.c,libNivLycee(x.niv),x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),'arrivé',x.doute?(x.doute.leve?'':'⚠ à vérifier : ')+libDoute(x):'']); }
   const autres=Object.entries(res.lignes).map(([d,x])=>x).filter(x=>x.p&&!x.p.a&&ids.includes(courseDe(cfg,x.p))&&!vu.has(x.d))
     .sort((a,b)=>a.p.c.localeCompare(b.p.c,'fr',{numeric:true})||a.d-b.d);
   for(const x of autres){ const n=noms[x.d]||{}, co=cfg.courses[courseDe(cfg,x.p)];
@@ -614,12 +645,12 @@ export function exportLyceeParClasse(res,noms,ids){
     const A=L.filter(x=>x.p.c===c), S=statsLycee(A), ins=El.filter(x=>x.p.c===c&&!x.p.st).length;
     syn.push([c,libNivLycee(niveauLycee(c)),ins,A.length,S.F.n,S.G.n,S.F.best!=null?fmtChrono(S.F.best):'',S.G.best!=null?fmtChrono(S.G.best):'',S.T.moy!=null?fmtChrono(S.T.moy):'']);
     const rows=[['Classe '+c+' — '+(cfg.titre||'Cross')+' (classement à l\'arrivée)'],[],
-      ['Course','Rang dans la course','Rang dans la classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Heure d\'arrivée']];
-    for(const x of A){ const n=noms[x.d]||{}; rows.push([cfg.courses[x.course].nom,x.rangCourse,x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first)]); }
+      ['Course','Rang dans la course','Rang dans la classe (même sexe)','Dossard','Nom','Prénom','Sexe','Temps','Heure d\'arrivée','Point de contrôle']];
+    for(const x of A){ const n=noms[x.d]||{}; rows.push([cfg.courses[x.course].nom,x.rangCourse,x.rangClasse||'',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.temps!=null?fmtChrono(x.temps):'',fmtHeure(x.first),x.doute?(x.doute.leve?'':'⚠ à vérifier : ')+libDoute(x):'']); }
     const vus=new Set(A.map(x=>x.d)), reste=El.filter(x=>x.p.c===c&&!vus.has(x.d));
     if(reste.length){ rows.push([],['Non classés : non arrivés, pas dans la bonne course, absents ou dispensés']);
       reste.forEach(x=>{ const n=noms[x.d]||{}; rows.push(['','','',x.d,n.nom||'',n.prenom||'',x.p.s||'',x.p.st?(x.p.st==='dispense'?'dispensé':'absent'):x.mauvaise?libMauvaise(cfg,x):'non arrivé']); }); }
-    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[20,10,14,8,20,14,6,9,14].map(w=>({wch:w}));
+    const ws=XLSX.utils.aoa_to_sheet(rows); ws['!cols']=[20,10,14,8,20,14,6,9,14,40].map(w=>({wch:w}));
     XLSX.utils.book_append_sheet(wb,ws,String(c).replace(/[:\\\/?*\[\]]/g,' ').slice(0,31));
   }
   const ws=XLSX.utils.aoa_to_sheet(syn); ws['!cols']=[10,8,9,9,14,15,20,22,12].map(w=>({wch:w}));
@@ -811,8 +842,8 @@ export class ScanQueue{
     },()=>{ this.lastErr=Date.now(); }).finally(()=>{ this.busy=false; this.notify(); });
   }
   csv(dev){
-    return 'id;heure;dossard;tablette;mode;horodatage_ms\n'+
-      this.list.map(s=>[s.id,fmtHeure(s.t),s.d,s.v||dev||'',s.m||'c',s.t].join(';')).join('\n');
+    return 'id;heure;dossard;tablette;mode;horodatage_ms;point\n'+
+      this.list.map(s=>[s.id,fmtHeure(s.t),s.d,s.v||dev||'',s.m||'c',s.t,s.pc?'controle':'arrivee'].join(';')).join('\n');
   }
 }
 

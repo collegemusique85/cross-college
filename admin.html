@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007c">
+<link rel="stylesheet" href="style.css?v=20261007d">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -169,7 +169,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261007c';
+  getNoms,setNoms,classesAdulte,douteOuvert,libDoute,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261007d';
 
 navBar('admin.html');
 const store=await boot();
@@ -194,7 +194,8 @@ function drawCourses(){
     const cl=res.classes.filter(x=>x.course===id);
     const P0=res.profs[id]||{n:0,total:0}, tours=cl.reduce((a,x)=>a+x.te,0)+P0.total, run=cl.reduce((a,x)=>a+x.coureurs,0)+P0.n;
     const AR=res.arrivees[id];
-    const bilan=AR?`${AR.arrives.length} arrivé${AR.arrives.length>1?'s':''} sur ${AR.inscrits} inscrits${AR.arrives[0]&&AR.arrives[0].temps!=null?' · meilleur temps '+fmtChrono(AR.arrives[0].temps):''}`
+    const nDt=AR?AR.arrives.filter(douteOuvert).length:0;
+    const bilan=AR?`${AR.arrives.length} arrivé${AR.arrives.length>1?'s':''} sur ${AR.inscrits} inscrits${AR.arrives[0]&&AR.arrives[0].temps!=null?' · meilleur temps '+fmtChrono(AR.arrives[0].temps):''}${AR.controle&&AR.controle.actif?' · point de contrôle actif'+(nDt?' · ⚠ '+nDt+' à vérifier':''):''}`
       :`${tours} tours · ${run} coureurs · ${fr1(tours*cfg.boucle)} km`;
     const quoi=(c.niveaux==='*'||c.niveaux.split(',').includes('*')?'toutes les classes':'niveaux '+esc(c.niveaux))+(c.sexe==='F'?' · filles':c.sexe==='G'?' · garçons':'')+(AR?' · à l\'arrivée':' · aux tours');
     const etat=!c.debut?'<span class="tag">pas partie</span>':(c.fin?'<span class="tag">terminée</span>':'<span class="tag g">en cours</span>');
@@ -269,6 +270,17 @@ function drawControl(){
     '<p class="small muted">Ces passages ne comptent pas : l\'élève reste dans les classements de sa course, marqué « pas dans la bonne course ». La tablette a affiché un écran rouge.</p><table class="t">'+
     A.mauvaise.sort((a,b)=>b.mauvaise.t-a.mauvaise.t).map(L=>`<tr><td>${ligne(L)}</td><td class="small">sa course : ${esc((cfg.courses[courseDe(cfg,L.p)]||{}).nom||'—')}</td>
       <td class="small">scanné pendant « ${esc((cfg.courses[L.mauvaise.course]||{}).nom||'?')} » à ${fmtHeure(L.mauvaise.t)}${L.mauvaise.v?' · '+esc(L.mauvaise.v):''}</td></tr>`).join('')+'</table>');
+  // Lycée : point de contrôle à mi-parcours
+  const DT=[]; for(const id of coursesOrdonnees(cfg).map(x=>x[0])){ const AR=res.arrivees[id]; if(AR) for(const x of AR.arrives) if(x.doute) DT.push({...x,course:id}); }
+  const ouverts=DT.filter(douteOuvert), leves=DT.filter(x=>!douteOuvert(x));
+  const pass=x=>(x.passages||[]).map(fmtHeure).join(', ')||'aucun';
+  if(ouverts.length) blocs.push('<h3 style="margin:14px 0 6px">Lycée : à vérifier (point de contrôle) <span class="tag o">'+ouverts.length+'</span></h3>'+
+    '<p class="small muted">L\'arrivée est comptée normalement. Après vérification, « Lever le doute » enlève le ⚠ partout (Direct, Podiums, fichiers).</p><div class="scroll"><table class="t">'+
+    ouverts.map(x=>`<tr><td>⚠ ${ligne(x)}<div class="small muted">${esc(cfg.courses[x.course].nom)} · arrivé ${x.rang}e en ${x.temps!=null?fmtChrono(x.temps):'—'}</div></td>
+      <td class="small">${esc(libDoute(x))}<div class="muted">passages au contrôle : ${pass(x)} · arrivée ${fmtHeure(x.first)}</div></td>
+      <td><button class="btn small" data-leve="${x.d}">Lever le doute</button></td></tr>`).join('')+'</table></div>');
+  if(leves.length) blocs.push('<details><summary style="cursor:pointer;margin:14px 0 6px;font-weight:600">Lycée : doutes levés <span class="tag">'+leves.length+'</span></summary><table class="t">'+
+    leves.map(x=>`<tr><td>${ligne(x)}</td><td class="small">${esc(libDoute(x))}</td><td><button class="btn small" data-unleve="${x.d}">Remettre le ⚠</button></td></tr>`).join('')+'</table></details>');
   if(A.adultesLibres.length) blocs.push('<h3 style="margin:14px 0 6px">Dossards adultes pas encore attribués <span class="tag o">'+A.adultesLibres.length+'</span></h3><p class="small">'+
     A.adultesLibres.map(L=>`<button class="btn small" data-adult="${L.d}">${L.d} · ${L.tours} tour${L.tours>1?'s':''}</button>`).join(' ')+'</p>');
   if(A.inconnus.length) blocs.push('<h3 style="margin:14px 0 6px">Numéros scannés absents de la liste <span class="tag r">'+A.inconnus.length+'</span></h3><p class="small">'+
@@ -292,6 +304,8 @@ $('control').onclick=e=>{
   if(b.dataset.adult){ $('aD').value=b.dataset.adult; $('aN').focus(); $('aD').scrollIntoView({behavior:'smooth',block:'center'}); }
   if(b.dataset.st!==undefined&&b.dataset.d) setStatut(+b.dataset.d,b.dataset.st);
   if(b.dataset.delc&&confirm('Annuler cette correction ?')) store.update({['corrections/'+b.dataset.delc]:null});
+  if(b.dataset.leve) store.update({['corrections/leve-'+b.dataset.leve]:{d:+b.dataset.leve,delta:0,leve:true,raison:'doute levé (point de contrôle)',t:now()}});
+  if(b.dataset.unleve) store.update({['corrections/leve-'+b.dataset.unleve]:null});
 };
 function setStatut(d,st){ store.update({['participants/'+d+'/st']:st||null}); }
 
@@ -425,11 +439,13 @@ $('xTpl').onclick=()=>{
 function drawLinks(){
   const base=location.href.replace(/[^/]*$/,''), k=encodeURIComponent(store.key);
   const org=orgKey(), o=org&&store.mode==='firebase'?'&org='+encodeURIComponent(org):'', avec=o?' — avec les noms':'';
-  const L=[...(o?[['★ Lien unique pour les collègues : tout le site, avec les noms','index.html',o]]:[]),['Tablettes de scan'+(o?' — sans les noms':''),'scan.html',''],['Classes en direct (TV, projection)'+avec,'direct.html',o],['Podiums (fin)'+avec,'resultats.html',o],
+  const L=[...(o?[['★ Lien unique pour les collègues : tout le site, avec les noms','index.html',o]]:[]),['Tablettes de scan'+(o?' — sans les noms':''),'scan.html',''],
+    ['Point de contrôle à mi-parcours (lycée)'+(o?' — sans les noms':''),'scan.html','','','mode=controle'],['Classes en direct (TV, projection)'+avec,'direct.html',o],['Podiums (fin)'+avec,'resultats.html',o],
     ...(o?[['Contrôle des scans (autre ordinateur)'+avec,'admin.html',o,'#controle'],['Organisation (autre ordinateur)'+avec,'admin.html',o]]:[]),
     ['Impression des dossards'+avec,'dossards.html',o]];
-  $('links').innerHTML=L.map(([t,p,oo,h])=>{
-    const u=base+p+(store.mode==='firebase'?'?cle='+k+oo:'')+(h||'');
+  $('links').innerHTML=L.map(([t,p,oo,h,extra])=>{
+    const q=[store.mode==='firebase'?'cle='+k+oo:'',extra||''].filter(Boolean).join('&');
+    const u=base+p+(q?'?'+q:'')+(h||'');
     let svg=''; try{ const q=qrcode(0,'M'); q.addData(u); q.make(); svg=q.createSvgTag({cellSize:3,margin:2,scalable:true}); }catch(e){}
     return `<div class="card"><h2 style="font-size:15px">${t}</h2><div class="qr">${svg}</div><p style="margin:8px 0"><code>${esc(u)}</code></p>
       <div class="row"><a class="btn small" href="${esc(u)}" target="_blank">Ouvrir</a><button class="btn small" data-copy="${esc(u)}">Copier</button></div></div>`;
@@ -450,12 +466,14 @@ function fillCfg(){
     <label>Niveaux (6,5 · 2,1,T · * = toutes) <input data-cv="${esc(id)}" value="${esc(x.niveaux)}"></label>
     <label${x.type==='arrivee'?' hidden':''} data-cdw="${esc(id)}">Durée de la course (min) — décompte sur la page Direct <input data-cd="${esc(id)}" inputmode="numeric" value="${x.duree||''}"></label>
     <label>Type <select data-ct="${esc(id)}"><option value="tours"${x.type!=='arrivee'?' selected':''}>Tours comptés (collège)</option><option value="arrivee"${x.type==='arrivee'?' selected':''}>Classement à l'arrivée (lycée)</option></select></label>
+    <label${x.type==='arrivee'?'':' hidden'} data-ccw="${esc(id)}">Passages au point de contrôle avant l'arrivée (0 = sans contrôle) <input data-cc="${esc(id)}" inputmode="numeric" value="${x.controle||0}"></label>
     <label${x.type==='arrivee'?'':' hidden'} data-cxw="${esc(id)}">Participants <select data-cx="${esc(id)}"><option value="">Filles et garçons</option><option value="F"${x.sexe==='F'?' selected':''}>Filles seulement</option><option value="G"${x.sexe==='G'?' selected':''}>Garçons seulement</option></select></label>
   </div>`).join('');
   cfgFilled=true;
 }
 $('cCourses').onchange=e=>{ const t=e.target.closest('[data-ct]'); if(t){ document.querySelector('[data-cxw="'+t.dataset.ct+'"]').hidden=t.value!=='arrivee';
-  document.querySelector('[data-cdw="'+t.dataset.ct+'"]').hidden=t.value==='arrivee'; } };
+  document.querySelector('[data-cdw="'+t.dataset.ct+'"]').hidden=t.value==='arrivee';
+  document.querySelector('[data-ccw="'+t.dataset.ct+'"]').hidden=t.value!=='arrivee'; } };
 $('cCourses').onclick=e=>{ const b=e.target.closest('[data-cdel]'); if(!b) return; const id=b.dataset.cdel, co=readCfg(S.config).courses[id];
   if(Object.keys(readCfg(S.config).courses).length<2){ alert('Il faut garder au moins une course.'); return; }
   if(!confirm('Supprimer « '+co.nom+' » ?'+(co.debut?' Elle a déjà un départ : ses résultats disparaîtront des classements.':''))) return;
@@ -490,6 +508,7 @@ $('cSave').onclick=()=>{
   document.querySelectorAll('[data-cv]').forEach(i=>u['config/courses/'+i.dataset.cv+'/niveaux']=i.value.replace(/\s+/g,'').toUpperCase());
   document.querySelectorAll('[data-ct]').forEach(i=>u['config/courses/'+i.dataset.ct+'/type']=i.value);
   document.querySelectorAll('[data-cd]').forEach(i=>u['config/courses/'+i.dataset.cd+'/duree']=Math.max(0,parseInt(i.value,10)||0));
+  document.querySelectorAll('[data-cc]').forEach(i=>u['config/courses/'+i.dataset.cc+'/controle']=(i.closest('.cc').querySelector('[data-ct]').value==='arrivee')?Math.max(0,parseInt(i.value,10)||0):null);
   document.querySelectorAll('[data-cx]').forEach(i=>u['config/courses/'+i.dataset.cx+'/sexe']=(i.closest('.cc').querySelector('[data-ct]').value==='arrivee'&&i.value)||null);
   store.update(u).then(()=>{ $('cSave').textContent='Enregistré ✓'; setTimeout(()=>$('cSave').textContent='Enregistrer les réglages',1500); });
 };
@@ -506,7 +525,9 @@ $('csvFile').onchange=async e=>{
       const c=l.split(';'), id=c[ix('id')], d=parseInt(c[ix('dossard')],10), t=parseInt(c[ix('horodatage_ms')],10);
       if(!id||!d||!t){ bad++; continue; }
       if(S.scans[id]){ deja++; continue; }
-      up['scans/'+id]={d,t,v:c[ix('tablette')]||'import',m:c[ix('mode')]||'c'}; neuf++;
+      up['scans/'+id]={d,t,v:c[ix('tablette')]||'import',m:c[ix('mode')]||'c'};
+      if(ix('point')>=0&&c[ix('point')]==='controle') up['scans/'+id].pc=1;   // scan du point de contrôle (lycée)
+      neuf++;
     }
   }
   if(neuf) await store.update(up);

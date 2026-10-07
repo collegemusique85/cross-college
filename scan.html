@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Scan cross">
 <title>Scan — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007c">
+<link rel="stylesheet" href="style.css?v=20261007d">
 <style>
   html,body{height:100%;background:#000;color:#fff;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
   #stage{position:fixed;inset:0;background:#000}
@@ -68,6 +68,13 @@
   #undoBtn{display:none}
   body.abs #undoBtn{display:block}
   body.abs #callBtn{display:none}
+  /* mode « contrôle » (lycée, mi-parcours) : bandeau violet, jamais confondu avec l'arrivée */
+  body.ctlm #topbar{background:linear-gradient(#5B2A86,#5B2A86CC)}
+  #ctlBand{display:none;position:absolute;top:64px;left:0;right:0;z-index:4;text-align:center;background:#5B2A86;color:#fff;font-weight:800;font-size:18px;padding:6px 10px;letter-spacing:.04em}
+  body.ctlm #ctlBand{display:block}
+  #flood.orange{background:#F28C28!important;color:#1A1000!important}
+  #flood.orange span{opacity:1;font-size:28px;font-weight:800;text-align:center;padding:0 24px;max-width:90vw}
+  body.ctlm #flood span{opacity:1;font-size:34px;font-weight:800}
   #alarm{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);z-index:5;background:var(--bad);color:#fff;text-align:center;padding:18px;font-weight:600;display:none}
 </style>
 </head>
@@ -79,6 +86,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
   <video id="v" playsinline muted autoplay></video>
   <div id="gate"><i></i><i></i><i></i><i></i></div>
   <div id="alarm">Lecture dégradée — ouvrir ⚙ puis « Relancer la caméra »</div>
+  <div id="ctlBand">POINT DE CONTRÔLE — ne compte pas l'arrivée</div>
   <div id="flood"><b id="floodNum">—</b><span id="floodSub"></span></div>
 
   <div id="topbar">
@@ -145,15 +153,23 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@2.1.0/dist/iife/reader/index.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script type="module">
-import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES,readCfg,courseDe} from './app.js?v=20261007c';
+import {$,boot,ScanQueue,uid,LS,VERSION,estAdulteNum,download,safeKey,fmtHeure,PAGES,readCfg,courseDe,estArrivee} from './app.js?v=20261007d';
 // scan.html?mode=absents : on scanne les dossards récupérés le matin ; l'élève est noté « absent ».
 const ABS=new URLSearchParams(location.search).get('mode')==='absents';
+// scan.html?mode=controle : point de contrôle à mi-parcours (lycée). Ces scans ne comptent jamais comme arrivée.
+const CTL=!ABS&&new URLSearchParams(location.search).get('mode')==='controle';
+if(CTL){
+  document.body.classList.add('ctlm'); document.title='Point de contrôle — Cross';
+  document.querySelector('#boot h2').textContent='Point de contrôle (lycée)';
+  document.querySelector('#boot p').textContent='Scanne chaque coureur à chaque passage. L\'écran indique son numéro de passage (1er, 2e…). Écran orange : plus de passages que prévu. Écran rouge : ce n\'est pas sa course. Ces scans ne comptent pas l\'arrivée.';
+  setTimeout(()=>{ const i=$('devname'); if(i&&!i.value) i.placeholder='ex. Contrôle 1'; },0);
+}
 if(ABS){
   document.body.classList.add('abs'); document.title='Absents — Cross';
   document.querySelector('#boot h2').textContent='Dossards des absents et dispensés';
   document.querySelector('#boot p').textContent='Scanne les dossards récupérés le matin. Écran bleu : l\'élève est noté absent et ne compte plus dans le suivi. Écran gris : déjà noté. Écran rouge : dossard inconnu, ou sa course est déjà partie (rien n\'est enregistré). Une erreur ? « Annuler le dernier ».';
 }
-$('menuLinks').innerHTML=PAGES.filter(([h])=>h!==(ABS?'scan.html?mode=absents':'scan.html')).map(([h,l])=>'<a class="btn" href="'+h+'">'+l+'</a>').join('');
+$('menuLinks').innerHTML=PAGES.filter(([h])=>h!==(ABS?'scan.html?mode=absents':CTL?'':'scan.html')).map(([h,l])=>'<a class="btn" href="'+h+'">'+l+'</a>').join('');
 $('menuBtn').onclick=()=>$('menu').classList.add('on');
 $('menuClose').onclick=()=>$('menu').classList.remove('on');
 
@@ -299,6 +315,21 @@ $('undoBtn').onclick=()=>{
   if(P[d]&&P[d].st==='absent') store.update({['participants/'+d+'/st']:null});
   flash(d,'annulé : l\'élève participe','same',1400);
 };
+// ------------------------------------------------------------ point de contrôle (lycée)
+// Tous les scans de contrôle (de toutes les tablettes) sont suivis : numéro de passage au contrôle, alerte orange à l'arrivée.
+const PC={}, pcVus=new Set();
+function ajoutPC(id,d,t){ if(pcVus.has(id)) return; pcVus.add(id); (PC[d]=PC[d]||[]).push(t); }
+if(!ABS) store.onScanAdded(s=>{ if(s&&s.pc) ajoutPC(s.id,s.d,s.t); });
+for(const s of Q.list) if(s.pc) ajoutPC(s.id,s.d,s.t);
+const ordinal=n=>n+(n===1?'er':'e');
+// Course du lycée en cours pour cet élève (ou null)
+function courseLycee(d){ const p=P[d]; if(!p||p.a) return null; const id=courseDe(cfg,p), co=id&&cfg.courses[id];
+  return co&&estArrivee(co)&&co.debut&&!co.fin?co:null; }
+// Passages distincts au contrôle depuis le départ (plusieurs tablettes au même passage = un seul)
+function passagesPC(d,co,jusqua){ const gap=(cfg.absence||60)*1000; let n=0, der=-Infinity;
+  for(const t of (PC[d]||[]).slice().sort((a,b)=>a-b)){ if(t<co.debut||t>jusqua) continue; if(t-der>gap) n++; der=t; } return n; }
+const controleActif=co=>Object.values(PC).some(L=>L.some(t=>t>=co.debut));
+
 // L'élève appartient-il à une course qui n'est pas celle en cours ? (le passage est enregistré mais ne comptera pas)
 function horsCourse(d){
   const p=P[d]; if(!p||p.a) return null;
@@ -316,13 +347,22 @@ function errBeep(){
 }
 function record(d,mode){
   if(ABS) return recordAbs(d);
-  Q.add({id:uid(),d,t:store.now(),v:devName(),m:mode});
+  const t=store.now(), id=uid();
+  Q.add(CTL?{id,d,t,v:devName(),m:mode,pc:1}:{id,d,t,v:devName(),m:mode});
   const autre=horsCourse(d);
-  $('floodNum').textContent=d;
-  $('floodSub').textContent=autre?'PAS DANS CETTE COURSE · '+(P[d].c||'')+' court en « '+autre+' »':describe(d);
-  FLOOD.className=autre?'on warn':'on';
-  if(autre) errBeep(); else { beep(); setTimeout(()=>speak(d),190); }
-  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.className='',autre?2200:450);
+  let sub=autre?'PAS DANS CETTE COURSE · '+(P[d].c||'')+' court en « '+autre+' »':describe(d), cls=autre?'warn':'', ms=autre?2200:450;
+  const co=courseLycee(d);
+  if(CTL){ ajoutPC(id,d,t);
+    if(!autre&&co){ const n=passagesPC(d,co,t+1);
+      sub=ordinal(n)+' passage'+(co.controle?' sur '+co.controle:'');
+      if(co.controle&&n>co.controle){ sub=ordinal(n)+' passage — '+co.controle+' prévus'; cls='orange'; ms=2200; } else ms=900; } }
+  else if(!autre&&co&&co.controle>0&&controleActif(co)){
+    const n=passagesPC(d,co,t);
+    if(n<co.controle){ sub='⚠ '+n+' passage'+(n>1?'s':'')+' sur '+co.controle+' au contrôle'; cls='orange'; ms=2600; } }
+  $('floodNum').textContent=d; $('floodSub').textContent=sub;
+  FLOOD.className='on'+(cls?' '+cls:'');
+  if(cls) errBeep(); else { beep(); setTimeout(()=>speak(d),190); }
+  clearTimeout(record.t); record.t=setTimeout(()=>FLOOD.className='',ms);
   countLabel();
 }
 function onHit(text){

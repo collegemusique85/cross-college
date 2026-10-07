@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Podiums — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007c">
+<link rel="stylesheet" href="style.css?v=20261007d">
 <style>
   body{background:var(--ink);color:#fff;min-height:100vh}
   .scr{padding:clamp(16px,2.4vw,40px);display:flex;flex-direction:column;gap:clamp(14px,2vh,24px);min-height:100vh}
@@ -84,7 +84,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
 import {$,esc,boot,compute,niveauxDe,niveauxPresents,niveauDe,libNiveau,estArrivee,courseDe,estAdulteNum,fr1,fmtChrono,TYPES,getNoms,setNoms,suivreNoms,publierNoms,nomDe,
-  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,classesLyceeCourse,classesLyceeNiveau,niveauxLyceePresents,NB_CLASSE_COURSE,NB_CLASSE_NIV,LS,navBar} from './app.js?v=20261007c';
+  parseWorkbook,exportWorkbook,exportParClasse,exportLyceeCSV,exportLyceeParClasse,classementLycee,statsLycee,libNivLycee,niveauLycee,ORDRE_LYCEE,idsLycee,coursesOrdonnees,trierIndiv,rangsIndiv,libMauvaise,douteOuvert,libDoute,classesLyceeCourse,classesLyceeNiveau,niveauxLyceePresents,NB_CLASSE_COURSE,NB_CLASSE_NIV,LS,navBar} from './app.js?v=20261007d';
 
 navBar('resultats.html',true);
 const store=await boot();
@@ -162,12 +162,14 @@ function liste(sec){
     const S2=statsLycee(A.filter(x=>!fcl||x.p.c===fcl)), ins=Object.values(res.lignes).filter(x=>dansSec(sec,x.p)&&!x.p.st&&(!fcl||x.p.c===fcl)).length;
     const f=(k,l)=>S2[k].n?l+' : '+S2[k].n+' arrivé'+(k==='F'?'e':'')+'s · meilleur temps '+fmtChrono(S2[k].best)+' · temps moyen '+fmtChrono(S2[k].moy):'';
     const note=[f('F','Filles'),f('G','Garçons'),(ins-A.filter(x=>!fcl||x.p.c===fcl).length>0?(ins-A.filter(x=>!fcl||x.p.c===fcl).length)+' pas encore arrivé(s)':'')].filter(Boolean).join('  —  ');
-    const rows=L.map((x,i)=>({lab:qui(x),sub:x.p.c+' · n° '+x.d,score:x.temps!=null?fmtChrono(x.temps):'—',
-      rang:i+1,cells:[qui(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d]}));
+    const dt=x=>douteOuvert(x)?' ⚠':'';
+    const rows=L.map((x,i)=>({lab:qui(x)+dt(x),sub:x.p.c+' · n° '+x.d+(douteOuvert(x)?' · à vérifier':''),score:x.temps!=null?fmtChrono(x.temps):'—',
+      rang:i+1,cells:[qui(x)+dt(x),x.temps!=null?fmtChrono(x.temps):'—',x.p.c+' · n° '+x.d+(douteOuvert(x)?' — ⚠ à vérifier : '+libDoute(x):'')]}));
+    const nd=L.filter(douteOuvert).length;
     // élèves de cette course scannés pendant une autre : affichés à la fin, sans rang
     const vus=new Set(A.map(x=>x.d));
     hors(sec,x=>!vus.has(x.d)&&(cat==='S'||x.p.s===cat)).forEach(x=>rows.push({mauv:true,rang:'—',cells:[qui(x),'—',x.p.c+' · n° '+x.d+' — '+libMauvaise(cfg,x)]}));
-    return {cols:['Rang','Coureur','Temps','Classe'],note,rows,podium:rows.filter(r=>!r.mauv)};
+    return {cols:['Rang','Coureur','Temps','Classe'],note:note+(nd?'  —  ⚠ '+nd+' à vérifier (point de contrôle)':''),rows,podium:rows.filter(r=>!r.mauv)};
   }
   const pr=sec.ids.map(id=>res.profs[id]).find(p=>p&&p.n), pm=pr?pr.moy:0;
   if(cat==='C'){
