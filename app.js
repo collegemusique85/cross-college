@@ -448,6 +448,9 @@ export function prepareImport(rows,cfg,existing){
   // Collège et lycée s'importent ensemble ou séparément : un fichier qui ne contient que
   // des classes du lycée ne remplace que le lycée, et inversement.
   const lyc=c=>classeDuLycee(c);
+  // Un fichier du lycée qui contient encore la 3PM : ses lignes 3PM sont ignorées (la 3PM vient du fichier du collège).
+  if(rows.some(r=>lyc(r.classe))){ const n3=rows.filter(r=>est3PM(r.classe)).length;
+    if(n3){ rows=rows.filter(r=>!est3PM(r.classe)); W.push(n3+' élève'+(n3>1?'s':'')+' de 3PM ignoré'+(n3>1?'s':'')+' dans ce fichier du lycée : la 3PM s\'importe avec le fichier du collège.'); } }
   const aL=rows.some(r=>lyc(r.classe)), aC=rows.some(r=>r.classe&&!lyc(r.classe));
   const pris={};
   for(const [d,p] of Object.entries(existing||{})) if(p&&!p.a&&(lyc(p.c)?!aL:!aC)){ keep[d]=p; pris[d]='liste déjà publiée'; }
@@ -527,9 +530,11 @@ export function niveauLycee(classe){ const c=String(classe||'').trim().toUpperCa
   if(c.startsWith('CAP')){ const m=c.match(/(\d)\s*$/); return m&&m[1]==='2'?'1':'2'; }
   return c[0]||'?'; }
 export const ORDRE_LYCEE=['2','1','T','3PM'];
-// Classe venant de la liste du lycée (d'après son nom), quelle que soit sa course : 2…, 1…, T…, CAP…, 3PM.
+// Classe de la liste du lycée (d'après son nom) : 2…, 1…, T…, CAP…
 // Sert à l'import (chaque liste ne remplace que sa partie) et à la numérotation (lycée à partir de 1001).
-export function classeDuLycee(c){ c=String(c||'').trim().toUpperCase(); return /^[21T]/.test(c)||c.startsWith('CAP')||c.startsWith('3PM'); }
+// Décision du 07/10 : la 3PM est importée avec le collège (fichier des équipes) et numérotée avec lui.
+export function classeDuLycee(c){ c=String(c||'').trim().toUpperCase(); return /^[21T]/.test(c)||c.startsWith('CAP'); }
+const est3PM=c=>String(c||'').trim().toUpperCase().startsWith('3PM');
 // Rangs général, par sexe, par niveau et sexe, par classe et sexe (ordre des premiers passages).
 // La 3PM compte dans le classement général du lycée et a aussi son propre classement (son « niveau »).
 export function classementLycee(res,ids){
