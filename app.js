@@ -209,7 +209,9 @@ export function niveauxPresents(cfg,id,classes){
 export const estArrivee = c => c && c.type==='arrivee';
 // Élève du lycée (course « classement à l'arrivée ») : dossards à partir de 1001.
 export function estLyceeClasse(cfg,classe){ const id=courseDeClasse(cfg,classe); return !!(id&&estArrivee(cfg.courses[id])); }
-export const estAdulteNum = d => d>=901 && d<=950;
+// Dossards adultes : 901 à 999 (élargi le 07/10, avant : 901 à 950).
+export const ADULTE_MIN=901, ADULTE_MAX=999;
+export const estAdulteNum = d => d>=ADULTE_MIN && d<=ADULTE_MAX;
 export const TYPES = {F:'Filles',G:'Garçons',M:'Mixte'};
 
 // ---------------------------------------------------------------- moteur de calcul
@@ -466,13 +468,13 @@ export function prepareImport(rows,cfg,existing){
       ||a.classe.localeCompare(b.classe)||a.nom.localeCompare(b.nom)||a.prenom.localeCompare(b.prenom));
     for(const r of sans){ r.dossard=String(lyc(r.classe)?++maxL:++maxC); r.auto=true; }
     W.push(sans.length+' dossard'+(sans.length>1?'s':'')+' numéroté'+(sans.length>1?'s':'')+' automatiquement (colonne vide)'+(aL?' ; lycée à partir de 1001':'')+'.');
-    if(maxC>900) E.push('La numérotation automatique du collège dépasse 900 : elle empiète sur les dossards réservés aux adultes (901 à 950).');
+    if(maxC>900) E.push('La numérotation automatique du collège dépasse 900 : elle empiète sur les dossards réservés aux adultes (901 à 999).');
   }
   const vus={...pris};
   for(const r of rows){
     const d=parseInt(r.dossard,10), ou=r.feuille+' ligne '+r.ligne;
     if(!(d>=1&&d<=9999)||String(d)!==String(r.dossard).trim()){ E.push(ou+' : dossard « '+r.dossard+' » invalide.'); continue; }
-    if(estAdulteNum(d)){ E.push(ou+' : le dossard '+d+' est réservé aux adultes (901 à 950).'); continue; }
+    if(estAdulteNum(d)){ E.push(ou+' : le dossard '+d+' est réservé aux adultes (901 à 999).'); continue; }
     if(vus[d]){ E.push('Dossard '+d+' en double ('+vus[d]+' et '+ou+').'); continue; }
     vus[d]=ou;
     if(!r.classe){ E.push(ou+' : classe manquante.'); continue; }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organisation — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007b">
+<link rel="stylesheet" href="style.css?v=20261007c">
 <style>
   .course{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid #ECE8DF}
   .course:first-of-type{border-top:0}
@@ -69,7 +69,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 
   <!-- ADULTES ------------------------------------------------------------>
   <div class="card">
-    <h2>Adultes (dossards 901 à 950)</h2>
+    <h2>Adultes (dossards 901 à 999)</h2>
     <p>Attribuez un dossard à la volée. Les passages déjà faits avec ce dossard sont repris automatiquement. Un adulte peut courir pour <b>plusieurs classes</b> : ses tours s'ajoutent à chacune, sans compter dans leur moyenne.</p>
     <div class="row">
       <input id="aD" inputmode="numeric" placeholder="901" style="width:100px">
@@ -129,7 +129,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <div class="row" style="margin-top:14px"><button class="btn primary" id="cSave">Enregistrer les réglages</button><button class="btn" id="cAdd">+ Ajouter une course</button></div>
     <div class="row" style="margin-top:10px;align-items:center"><span class="small muted">Préréglages :</span>
       <button class="btn small" data-preset="journee">Journée : lycée (6 départs, à l'arrivée), puis 6<sup>e</sup>-5<sup>e</sup> et 4<sup>e</sup>-3<sup>e</sup>-3PM (45 min aux tours)</button></div>
-    <p class="small muted" style="margin-top:10px">Le lycée et le collège partagent le même événement : dossards du lycée à partir de 1001, du collège à partir de 1, adultes de 901 à 950. Chaque liste peut être importée séparément sans effacer l'autre.</p>
+    <p class="small muted" style="margin-top:10px">Le lycée et le collège partagent le même événement : dossards du lycée à partir de 1001, du collège à partir de 1, adultes de 901 à 999. Chaque liste peut être importée séparément sans effacer l'autre.</p>
   </details>
 
   <!-- SECOURS ------------------------------------------------------------>
@@ -169,7 +169,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script type="module">
 import {$,esc,boot,compute,readCfg,niveauxDe,courseDeClasse,fmtHeure,fmtDuree,fmtChrono,fr1,TYPES,
-  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261007b';
+  getNoms,setNoms,classesAdulte,suivreNoms,publierNoms,effacerNomsEnLigne,orgKey,setOrgKey,safeKey,nomDe,parseWorkbook,prepareImport,exportWorkbook,estAdulteNum,uid,firebaseConfigured,navBar,exportParClasse,exportLyceeCSV,exportLyceeParClasse,estArrivee,LS,coursesOrdonnees,idsLycee,courseDe,estLyceeClasse} from './app.js?v=20261007c';
 
 navBar('admin.html');
 const store=await boot();
@@ -346,7 +346,7 @@ function drawAdults(){
 }
 $('aSave').onclick=()=>{
   const d=parseInt($('aD').value,10);
-  if(!estAdulteNum(d)){ alert('Les dossards adultes vont de 901 à 950.'); return; }
+  if(!estAdulteNum(d)){ alert('Les dossards adultes vont de 901 à 999.'); return; }
   const p={a:1}, cl=classesCochees(); if(cl.length) p.cr=cl.join(', '); if($('aN').value.trim()) p.n=$('aN').value.trim().slice(0,40);
   store.update({['participants/'+d]:p}); $('aD').value=''; $('aN').value=''; cocher([]); $('aCbox').open=false;
 };
@@ -410,7 +410,7 @@ $('xTpl').onclick=()=>{
   XLSX.utils.book_append_sheet(wb,ws,'Participants');
   const aide=XLSX.utils.aoa_to_sheet([['Mode d\'emploi'],[''],
     ['Une ligne par élève. L\'ordre des colonnes n\'a pas d\'importance, seuls leurs titres comptent.'],
-    ['Dossard : laisser vide pour une numérotation automatique (par niveau, classe, nom). Ne pas utiliser 901 à 950, réservés aux adultes.'],
+    ['Dossard : laisser vide pour une numérotation automatique (par niveau, classe, nom). Ne pas utiliser 901 à 999, réservés aux adultes.'],
     ['Classe : 601, 502, 3PM… Le premier chiffre donne le niveau, donc la course.'],
     ['Sexe : F ou G.'],
     ['Groupe : G1, G2… (5 élèves au maximum). Laisser vide si l\'élève n\'a pas de groupe : il compte quand même pour sa classe.'],

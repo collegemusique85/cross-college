@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dossards — Cross</title>
-<link rel="stylesheet" href="style.css?v=20261007b">
+<link rel="stylesheet" href="style.css?v=20261007c">
 <style>
   /* Feuille dessinée à 190 × 270 mm : elle tient dans une A4 même si le navigateur
      ajoute ses propres marges (Safari), au lieu de déborder et de décaler toutes les pages. */
@@ -67,6 +67,8 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
     <label>Ordre
       <select id="ord"><option value="c">Par classe puis nom</option><option value="n">Par numéro</option></select></label>
     <label style="display:flex;gap:8px;align-items:center;margin-top:18px"><input type="checkbox" id="withNames" checked> Imprimer le nom et le prénom</label>
+    <span id="plage" hidden style="display:flex;gap:8px;align-items:flex-end"><label>Du n° <input id="aDe" type="number" min="901" max="999" value="901" style="width:90px"></label>
+      <label>au n° <input id="aA" type="number" min="901" max="999" value="999" style="width:90px"></label></span>
   </div>
   <div class="row">
     <button class="btn vest" id="print">Imprimer</button>
@@ -77,7 +79,7 @@ addEventListener('error',e=>{ if(/export|import|module/i.test(e.message||'')&&!d
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script type="module">
-import {$,esc,boot,getNoms,setNoms,suivreNoms,publierNoms,orgKey,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261007b';
+import {$,esc,boot,getNoms,setNoms,suivreNoms,publierNoms,orgKey,readCfg,niveauxDe,courseDeClasse,niveauDe,navBar,parseWorkbook,prepareImport} from './app.js?v=20261007c';
 navBar('dossards.html');
 const store=await boot();
 let noms=getNoms(store.key), etatNoms='local';
@@ -91,7 +93,7 @@ function options(){
   let h='<option value="all">Tous les élèves</option>';
   for(const id of cfg.ordre) h+=`<option value="co:${id}">${esc(cfg.courses[id].nom)} (${cfg.courses[id].niveaux==='*'?'toutes les classes':'niveaux '+esc(cfg.courses[id].niveaux)}${cfg.courses[id].sexe?' · '+(cfg.courses[id].sexe==='F'?'filles':'garçons'):''})</option>`;
   h+=cls.map(c=>`<option value="cl:${esc(c)}">Classe ${esc(c)}</option>`).join('');
-  h+='<option value="adultes">Adultes : dossards 901 à 950 (vierges)</option>';
+  h+='<option value="adultes">Adultes : dossards 901 à 999 (vierges)</option>';
   $('sel').innerHTML=h; if([...$('sel').options].some(o=>o.value===cur)) $('sel').value=cur;
 }
 function qrSvg(d){
@@ -102,7 +104,9 @@ function qrSvg(d){
 }
 function liste(){
   const v=$('sel').value;
-  if(v==='adultes') return Array.from({length:50},(_,i)=>({d:901+i,adulte:true}));
+  $('plage').hidden=v!=='adultes'; $('plage').style.display=v==='adultes'?'flex':'none';
+  if(v==='adultes'){ const c=x=>Math.min(999,Math.max(901,parseInt(x,10)||901)); let a=c($('aDe').value), b=c($('aA').value||999); if(b<a) [a,b]=[b,a];
+    return Array.from({length:b-a+1},(_,i)=>({d:a+i,adulte:true})); }
   let L=Object.entries(P).filter(([d,p])=>!p.a).map(([d,p])=>({d:+d,p}));
   if(v.startsWith('co:')) L=L.filter(x=>courseDeClasse(cfg,x.p.c,x.p.s||'')===v.slice(3));
   if(v.startsWith('cl:')) L=L.filter(x=>x.p.c===v.slice(3));
@@ -169,7 +173,7 @@ $('xFile').onchange=async e=>{
     },err=>{ $('xOut').innerHTML='<p class="msg e">Échec de l\'envoi : '+esc(err.message||err)+'</p>'; });
   };
 };
-$('sel').onchange=draw; $('ord').onchange=draw; $('withNames').onchange=draw;
+$('sel').onchange=draw; $('ord').onchange=draw; $('aDe').oninput=draw; $('aA').oninput=draw; $('withNames').onchange=draw;
 $('print').onclick=()=>window.print();
 suivreNoms(store,(n,e)=>{ noms=n; etatNoms=e; nomsInfo(); draw(); });
 </script>
